@@ -76,19 +76,20 @@ begin
 --	ack <= ack_addr or ack_data;
 
 	---------------start flag generation----------------------------
---	process(RST,I2S_EN_stretched,tx)
---	begin
---		if (RST ='1') then
---			start	<= '0';
---		elsif (tx='1') then
---			start	<= '0';
---		--falling_edge e rising_edge don't need to_x01 because it is already used inside these functions
---		elsif	(falling_edge(I2S_EN_stretched)) then
---			start <= '1';
---		end if;
---	end process;
+	process(RST,I2S_EN,CLK_IN)
+	begin
+		if (RST ='1') then
+			start	<= '0';
+		elsif (CLK_IN='0') then
+			start	<= '0';
+		--falling_edge e rising_edge don't need to_x01 because it is already used inside these functions
+		elsif	(rising_edge(I2S_EN)) then
+			start <= '1';
+		end if;
+	end process;
 --	
 --	---------------I2S_EN_stretched flag generation----------------------------
+---------------------------- (for status register)----------------------------
 --	process(RST,CLK,I2S_EN)
 --	begin
 --		if (RST ='1') then
@@ -149,13 +150,13 @@ begin
 --	end process;
 	
 	---------------SCK generation----------------------------
-	process(start,stop,SCK,tx,CLK,RST)
+	process(start,stop,SCK,tx,CLK_IN,RST)
 	begin
 		if (RST ='1') then
 			sck_en	<= '0';
-		elsif (stop = '1' and SCK = '1') then
+		elsif (stop = '1') then
 			sck_en	<= '0';
-		elsif	((start='1' or tx ='1') and falling_edge(CLK)) then
+		elsif	(start='1') then
 			sck_en <= '1';
 		end if;
 	end process;
@@ -174,14 +175,14 @@ begin
 	end process;
 	
 	---------------parallel_data_in write------------------------
-	parallel_data_in <= right_data(N-1 downto 0) when WS='1' else left_data(N-1 downto 0);
+	parallel_data_in <= (others=>'0') when (RST='1' or stop='1') else
+								right_data(N-1 downto 0) when WS='1' else
+								left_data(N-1 downto 0);--when WS='0'
 	
 	---------------fifo_sd_out write-----------------------------
 	fifo_w: process(RST,parallel_data_in,load,SCK,stop)
 	begin
-		if (RST ='1'  or stop='1') then
-			fifo_sd_out <= (others => '0');
-		elsif (load='1') then
+		if (load='1') then
 			fifo_sd_out <= parallel_data_in;
 		--updates fifo at falling edge of SCK so it can be read at rising_edge of SCK
 		elsif(falling_edge(SCK))then

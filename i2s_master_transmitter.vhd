@@ -58,6 +58,8 @@ architecture structure of i2s_master_transmitter is
 			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCL
 			RST: in std_logic;--reset
 			I2S_EN: in std_logic;--enables transfer to start
+			left_data: in std_logic_vector(31 downto 0);--left channel
+			right_data: in std_logic_vector(31 downto 0);--right channel
 			WORDS: in std_logic_vector(1 downto 0);--controls number of words to receive or send (MSByte	first, MSB first)
 			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
@@ -84,7 +86,6 @@ architecture structure of i2s_master_transmitter is
 	end component;
 	
 	constant N: natural := 4;--number of bits in each data written/read
-	signal read_mode: std_logic;
 	signal words: std_logic_vector(1 downto 0);--00: 1 word; 01:2 words; 10: 3 words (unused); 11: 4 words
 	signal all_i2c_irq: std_logic_vector(1 downto 0);--0: successfully transmitted all words; 1: NACK received
 	signal all_i2c_iack: std_logic_vector(1 downto 0);--0: successfully transmitted all words; 1: NACK received
@@ -95,8 +96,6 @@ architecture structure of i2s_master_transmitter is
 	
 	signal DR_out: std_logic_vector(31 downto 0);--data transmitted/received
 	signal DR_in:  std_logic_vector(31 downto 0);--data that will be written to DR
-	signal DR_in_shift:  std_logic_vector(31 downto 0);--data received from I2C bus
-	signal DR_shift:std_logic;--enables write value from I2C generic component (received from I2C bus)
 	signal DR_wren:std_logic;--enables write value from D port
 	signal DR_ena:std_logic;--DR ENA (enables DR write)
 	
@@ -109,8 +108,6 @@ architecture structure of i2s_master_transmitter is
 	signal all_periphs_rden: std_logic_vector(2 downto 0);
 	signal address_decoder_wren: std_logic_vector(2 downto 0);
 begin
-
-	read_mode <= CR_Q(0);
 	
 	i2s: i2s_master_transmitter_generic
 	generic map (N => N)
@@ -118,6 +115,8 @@ begin
 				CLK_IN => CLK,
 				RST => RST,
 				I2S_EN => CR_Q(10),
+				left_data => (others=>'0'),
+				right_data => (others=>'0'),
 				WORDS => CR_Q(9 downto 8),
 				IACK => all_i2c_iack,
 				IRQ => all_i2c_irq,
@@ -142,12 +141,10 @@ begin
 				output => irq_ctrl_Q
 	);
 	
-	--data register: data to be transmited or received, or address
+	--data register: data to be transmited
 	DR_wren <= address_decoder_wren(1);
-	DR_ena <= 	DR_shift when read_mode='1' else
-					DR_wren;
-	DR_in <= DR_out(31-N downto 0) & DR_in_shift(N-1 downto 0) when read_mode='1' else-- read mode (master receiver after address acknowledgement)
-				D;-- write mode (master transmitter)
+	DR_ena <=	DR_wren;
+	DR_in <= D;-- write mode (master transmitter)
 	
 	DR: d_flip_flop port map(D => DR_in,
 									RST=> RST,--resets all previous history of input signal

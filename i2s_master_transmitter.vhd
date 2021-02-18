@@ -55,8 +55,6 @@ architecture structure of i2s_master_transmitter is
 	generic (N: natural);--number of bits in each word
 	port (
 			DR_out: in std_logic_vector(31 downto 0);--data to be transmitted
-			DR_in_shift: buffer std_logic_vector(31 downto 0);--data received, will be shifted into DR
-			DR_shift: out std_logic;--DR must shift left N bits to make room for new word
 			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCL
 			RST: in std_logic;--reset
 			I2S_EN: in std_logic;--enables transfer to start
@@ -117,8 +115,6 @@ begin
 	i2s: i2s_master_transmitter_generic
 	generic map (N => N)
 	port map(DR_out => DR_out,
-				DR_in_shift  => DR_in_shift,
-				DR_shift=> DR_shift,
 				CLK_IN => CLK,
 				RST => RST,
 				I2S_EN => CR_Q(10),

@@ -18,8 +18,6 @@ entity i2s_master_transmitter_generic is
 	generic (N: natural);--number of bits in each word
 	port (
 			DR_out: in std_logic_vector(31 downto 0);--data to be transmitted
-			DR_in_shift: buffer std_logic_vector(31 downto 0);--data received, will be shifted into DR
-			DR_shift: out std_logic;--DR must shift left N bits to make room for new word
 			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCK
 			RST: in std_logic;--reset
 			I2S_EN: in std_logic;--enables transfer to start
@@ -158,7 +156,7 @@ begin
 	end process;
 	
 	---------------fifo_sd_out write-----------------------------
-	fifo_w: process(RST,load,SCK,stop)
+	fifo_w: process(RST,parallel_data_in,load,SCK,stop)
 	begin
 		if (RST ='1'  or stop='1') then
 			fifo_sd_out <= (others => '0');

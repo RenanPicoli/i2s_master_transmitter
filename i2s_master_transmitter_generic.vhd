@@ -21,6 +21,8 @@ entity i2s_master_transmitter_generic is
 			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCK
 			RST: in std_logic;--reset
 			I2S_EN: in std_logic;--enables transfer to start
+			left_data: in std_logic_vector(31 downto 0);--left channel
+			right_data: in std_logic_vector(31 downto 0);--right channel
 			WORDS: in std_logic_vector(1 downto 0);--controls number of words to receive or send (MSByte	first, MSB first)
 			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
@@ -32,6 +34,14 @@ end i2s_master_transmitter_generic;
 
 architecture structure of i2s_master_transmitter_generic is
 
+	component prescaler
+	generic(factor: integer);
+	port (CLK_IN: in std_logic;--input clock
+			rst: in std_logic;--synchronous reset
+			CLK_OUT: out std_logic--output clock
+	);
+	end component;
+	
 	signal fifo_sd_out: std_logic_vector(N-1 downto 0);--data to write on SD: one byte plus stop bit
 	signal fifo_SD_in: std_logic_vector(N-1 downto 0);-- data read from SD: one byte plus start and stop bits
 	
@@ -89,6 +99,14 @@ begin
 --			I2S_EN_stretched <= '0';
 --		end if;
 --	end process;
+
+	---------------WS generation----------------------------
+	ws_gen: prescaler
+	generic map (factor => 2*N)
+	port map(CLK_IN	=> SCK,
+				RST		=> RST,
+				CLK_OUT	=> WS
+	);
 	
 	---------------WS_delayed generation----------------------------
 	process(RST,SCK,WS)
@@ -154,6 +172,9 @@ begin
 			SD <= fifo_sd_out(N-1);--sends the MSbit of fifo_sd_out
 		end if;
 	end process;
+	
+	---------------parallel_data_in write------------------------
+	parallel_data_in <= right_data(N-1 downto 0) when WS='1' else left_data(N-1 downto 0);
 	
 	---------------fifo_sd_out write-----------------------------
 	fifo_w: process(RST,parallel_data_in,load,SCK,stop)

@@ -141,7 +141,9 @@ begin
 				output => irq_ctrl_Q
 	);
 	
-	--data register: data to be transmited
+	--data register: data to be transmited (goes to fifo, if fifo is full, discard older data and raises irq)
+	--each stage of fifo stores a 32 bit word,
+	--if word length (audio depth) is less than 32 bits, only LSB of a fifo stage is transmitted
 	DR_wren <= address_decoder_wren(1);
 	DR_ena <=	DR_wren;
 	DR_in <= D;-- write mode (master transmitter)
@@ -153,11 +155,10 @@ begin
 									Q=> DR_out
 									);
 	
-	--control register: 
-	--bit 10: I2C_EN (write '1' to start, reset automatically)
-	--bits 9:8 WORDS - 1 (MSByte first, MSB first);
-	--bits 7:1 slave address;
-	--bit 0: read (0) or write (1)
+	--control register:
+	--bits 7:4 word length to use of each fifo word(4 bit, 8 bit, 16 bit, 20 bit, 24 bit, 32 bit)
+	--bits 3:1 WORDS to transmit - 1 (older data from fifo is sent first, MSB first);
+	--bit 0: I2S_EN (write '1' to start, reset automatically)
 	CR_in <= D when CR_wren='1' else CR_Q(31 downto 11) & '0' & CR_Q(9 downto 0);
 	CR_ena <= '1';
 	CR_wren <= address_decoder_wren(0);

@@ -114,7 +114,7 @@ begin
 	port map(DR_out => DR_out,
 				CLK_IN => CLK,
 				RST => RST,
-				I2S_EN => CR_Q(10),
+				I2S_EN => CR_Q(0),
 				left_data => (others=>'0'),
 				right_data => (others=>'0'),
 				WORDS => CR_Q(9 downto 8),
@@ -156,10 +156,14 @@ begin
 									);
 	
 	--control register:
-	--bits 7:4 word length to use of each fifo word(4 bit, 8 bit, 16 bit, 20 bit, 24 bit, 32 bit)
-	--bits 3:1 WORDS to transmit - 1 (older data from fifo is sent first, MSB first);
+	--bits 6:4 DS data size, (DS+1)*4 is the word length to use for each channel (will be also half of a frame size).
+	--		Each fifo stage contains two of these words (one frame), right-aligned.
+	--		(000: 4 bit, 001: 8 bit, 010: 12 bit, 011: 16 bit, 100: 20 bit, 101: 24 bit, 110: 28 bit, 111: 32 bit)
+	--bits 3:1 NFR number of frames to transmit, if NFR=0, transmits forever;
+	--		Each frame is a pair of left-right data.
+	--		Older data from fifo is sent first, MSB first for each channel)
 	--bit 0: I2S_EN (write '1' to start, reset automatically)
-	CR_in <= D when CR_wren='1' else CR_Q(31 downto 11) & '0' & CR_Q(9 downto 0);
+	CR_in <= D when CR_wren='1' else CR_Q(31 downto 1) & '0';
 	CR_ena <= '1';
 	CR_wren <= address_decoder_wren(0);
 	CR: d_flip_flop port map(D => CR_in,

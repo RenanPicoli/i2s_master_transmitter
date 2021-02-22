@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.all;
-use work.my_types.all;
+--use work.my_types.all;
 
 entity testbench is
 end testbench;
@@ -92,20 +92,21 @@ begin
 	--I2S registers configuration	
 	master_setup:process
 	begin
-		--zeroes & WORDS & SLV ADDR & R/W(1 read mode; 0 write mode)
-		ADDR <= "00";--CR address
-		D <= (31 downto 10 =>'0') & "01" & "0000101" & RW_bit;--I2C_EN: 0; WORDS: 01; ADDR: 1010
-		WREN <= '1';
-		wait for TIME_RST + TIME_DELTA;
+--		--zeroes & DS[2:0] & NFR[2:0] & I2S_EN
+--		ADDR <= "00";--CR address
+--		D <= (31 downto 7 =>'0') & "000" & "010" & '0';--I2S_EN: 0; NFR: 010 (2); DS: 000 (4)
+--		WREN <= '1';
+--		wait for TIME_RST + TIME_DELTA;
 		
 		--bits 7:0 data to be transmitted (goes to fifo)
 		ADDR <= "01";--DR address	
 		D <= x"0000_0095";-- 1001 0101	
 		WREN <= '1';
-		wait for TIME_DELTA;
+		wait for TIME_RST + TIME_DELTA;
 
+		--zeroes & DS[2:0] & NFR[2:0] & I2S_EN
 		ADDR <= "00";--CR address, will start transfer
-		D<=(31 downto 11 =>'0') & '1' & "01" & "0000101" & RW_bit;--I2C_EN: 1; WORDS: 01; ADDR: 1010
+		D<=(31 downto 7 =>'0') & "000" & "010" & '1';--I2S_EN: 1; NFR: 010 (2); DS: 000 (4)
 		WREN <= '1';
 		wait for TIME_DELTA;
 		

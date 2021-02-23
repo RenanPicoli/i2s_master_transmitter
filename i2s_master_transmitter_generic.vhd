@@ -67,7 +67,7 @@ architecture structure of i2s_master_transmitter_generic is
 	signal ack_finished: std_logic;--active HIGH, indicates the ack was high in previous SCK cycle [0 1].
 	signal SCK_n: std_logic;-- not SCK
 	signal bits_sent: natural;--number of bits transmitted
-	signal words_sent: natural;--number of words(bytes) transmitted
+	signal frame_number: natural;--number of the frame (pairs left-right data) being transmitted
 	
 	signal sck_en: std_logic;--enables SCK to follow CLK
 	
@@ -210,25 +210,21 @@ begin
 --			DR_in_shift <= (31 downto N =>'0') & fifo_SD_in;
 --		end if;
 --	end process;
---	
---	---------------words_sent write-----------------------------
---	process(RST,I2S_EN,tx_data,ack,stop)
---	begin
---		if (RST ='1' or stop='1') then
---			words_sent <= 0;
---		elsif (I2S_EN = '1') then
---			words_sent <= 0;
---		elsif (stop = '1') then
---			words_sent <= 0;
---		elsif(rising_edge(ack) and tx_data='1')then
---			words_sent <= words_sent + 1;
---			if (words_sent = to_integer(unsigned(WORDS))+1) then
---				words_sent <= 0;
+	
+	---------------frame_number write-----------------------------
+	frames_w: process(RST,I2S_EN,WS,stop)
+	begin
+		if (RST ='1' or I2S_EN = '1' or stop='1') then
+			frame_number <= 0;
+		elsif(rising_edge(WS))then
+			frame_number <= frame_number + 1;
+--			if (frame_number = to_integer(unsigned(WORDS))+1) then
+--				frame_number <= 0;
 --			end if;
---		end if;
---
---	end process;
---	
+		end if;
+
+	end process;
+	
 --	---------------ack_addr flag generation----------------------
 --	process(tx_addr,bits_sent,SCK,RST,stop)
 --	begin

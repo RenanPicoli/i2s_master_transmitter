@@ -23,7 +23,7 @@ entity i2s_master_transmitter_generic is
 			I2S_EN: in std_logic;--enables transfer to start
 			left_data: in std_logic_vector(31 downto 0);--left channel
 			right_data: in std_logic_vector(31 downto 0);--right channel
-			WORDS: in std_logic_vector(1 downto 0);--controls number of words to receive or send (MSByte	first, MSB first)
+			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
 			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			SD: buffer std_logic;--data line
@@ -56,6 +56,8 @@ architecture structure of i2s_master_transmitter_generic is
 	signal ack_addr_received: std_logic;--active HIGH, indicates slave-receiver acknowledged
 	signal start: std_logic;-- indicates start bit being transmitted (also applies to repeated start)
 	signal stop: std_logic;-- indicates stop bit being transmitted
+	signal stop_stretched: std_logic;-- indicates stop bit being transmitted (useful to send last bit)
+	signal stop_stretched_2: std_logic;-- indicates stop bit being transmitted (useful to send last bit)
 	
 	--signals inherent to this implementation
 	signal parallel_data_in: std_logic_vector(N-1 downto 0);--data to write on SD: one word
@@ -121,19 +123,40 @@ begin
 	
 	---------------stop flag generation----------------------------
 	----------stop flag will be used to drive SD,SCK--------------
---	process(RST,ack,ack_received,ack_finished,SD,SCK,words_sent,WORDS)
---	begin
---		if (RST ='1') then
---			stop	<= '0';
---		elsif	((ack='0' and words_sent=to_integer(unsigned(WORDS))+1) or
---				(ack='0' and ack_finished='1' and ack_received='0' and SCK='0'))--implicitly samples ack_received at falling_edge of ack
---				then
---			stop <= '1';
---		elsif (rising_edge(SD) and SCK='1') then
---			stop	<= '0';
---		end if;
---	end process;
+	process(RST,SCK,frame_number,NFR,WS,WS_delayed)
+	begin
+		if (RST ='1') then
+			stop	<= '0';
+		elsif (WS_delayed='1' and SCK='1') then
+			stop	<= '0';
+		elsif	(frame_number=to_integer(unsigned(NFR)) and rising_edge(WS)) then
+			stop <= '1';
+		end if;
+	end process;
+		
+	---------------stop_stretched flag generation----------------------------
+	process(RST,CLK,stop)
+	begin
+		if (RST ='1') then
+			stop_stretched	<= '0';
+		elsif (stop='1') then
+			stop_stretched	<= '1';
+		elsif	(falling_edge(CLK)) then
+			stop_stretched <= '0';
+		end if;
+	end process;
 	
+	---------------stop_stretched_2 flag generation----------------------------
+	process(RST,CLK,stop_stretched)
+	begin
+		if (RST ='1') then
+			stop_stretched_2	<= '0';
+		elsif	(stop_stretched='0' and CLK='1') then
+			stop_stretched_2 <= '0';
+		elsif (rising_edge(stop_stretched)) then
+			stop_stretched_2	<= '1';
+		end if;
+	end process;
 	---------------load generation----------------------------
 	load <= WS xor WS_delayed;
 	
@@ -150,14 +173,14 @@ begin
 --	end process;
 	
 	---------------SCK generation----------------------------
-	process(start,stop,SCK,tx,CLK_IN,RST)
+	process(start,stop_stretched_2,CLK_IN,RST)
 	begin
 		if (RST ='1') then
 			sck_en	<= '0';
-		elsif (stop = '1') then
-			sck_en	<= '0';
 		elsif	(start='1') then
 			sck_en <= '1';
+		elsif (falling_edge(stop_stretched_2)) then
+			sck_en	<= '0';
 		end if;
 	end process;
 	CLK <= CLK_IN;
@@ -166,17 +189,21 @@ begin
 
 	---------------SD write----------------------------
 	--serial write on SD bus
-	serial_w: process(start,SCK,fifo_sd_out,RST,stop)
+	serial_w: process(start,SCK,fifo_sd_out,RST,stop_stretched_2)
 	begin
-		if (RST ='1' or start = '1' or stop='1') then
+		if (RST ='1' or start = '1') then
 			SD <= '0';
 		elsif(falling_edge(SCK))then--SD is driven using the fifo, which updates at falling_edge of SCK
-			SD <= fifo_sd_out(N-1);--sends the MSbit of fifo_sd_out
+			if (stop_stretched_2='1') then
+				SD <= '0';
+			else
+				SD <= fifo_sd_out(N-1);--sends the MSbit of fifo_sd_out
+			end if;
 		end if;
 	end process;
 	
 	---------------parallel_data_in write------------------------
-	parallel_data_in <= (others=>'0') when (RST='1' or stop='1') else
+	parallel_data_in <= (others=>'0') when (RST='1' or start='1') else
 								right_data(N-1 downto 0) when WS='1' else
 								left_data(N-1 downto 0);--when WS='0'
 	

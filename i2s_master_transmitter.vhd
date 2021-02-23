@@ -60,7 +60,7 @@ architecture structure of i2s_master_transmitter is
 			I2S_EN: in std_logic;--enables transfer to start
 			left_data: in std_logic_vector(31 downto 0);--left channel
 			right_data: in std_logic_vector(31 downto 0);--right channel
-			WORDS: in std_logic_vector(1 downto 0);--controls number of words to receive or send (MSByte	first, MSB first)
+			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
 			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			SD: out std_logic;--data line
@@ -117,7 +117,7 @@ begin
 				I2S_EN => CR_Q(0),
 				left_data => x"0000_000F",
 				right_data => x"0000_000A",
-				WORDS => CR_Q(9 downto 8),
+				NFR => CR_Q(3 downto 1),
 				IACK => all_i2c_iack,
 				IRQ => all_i2c_irq,
 				WS => WS,

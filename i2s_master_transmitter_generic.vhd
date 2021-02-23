@@ -129,7 +129,7 @@ begin
 			stop	<= '0';
 		elsif (WS_delayed='1' and SCK='1') then
 			stop	<= '0';
-		elsif	(frame_number=to_integer(unsigned(NFR)) and rising_edge(WS)) then
+		elsif	(frame_number=to_integer(unsigned(NFR)) and NFR/="000" and rising_edge(WS)) then
 			stop <= '1';
 		end if;
 	end process;

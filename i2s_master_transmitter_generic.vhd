@@ -62,8 +62,10 @@ architecture structure of i2s_master_transmitter_generic is
 	--signals inherent to this implementation
 	signal parallel_data_in: std_logic_vector(N-1 downto 0);--data to write on SD: one word
 	signal load: std_logic;--load shift register asynchronously
-	signal I2S_EN_stretched: std_logic;
+	signal I2S_EN_delayed: std_logic;-- I2S_EN flag delayed one SCK clock cycle (for WS synchronizing)
 	signal WS_delayed: std_logic;
+	signal prescaler_out: std_logic;
+	signal prescaler_rst: std_logic;--prescaler reset
 	signal CLK: std_logic;--used to generate SCK (when sck_en = '1')
 	
 	signal ack_finished: std_logic;--active HIGH, indicates the ack was high in previous SCK cycle [0 1].
@@ -89,27 +91,33 @@ begin
 			start <= '1';
 		end if;
 	end process;
---	
---	---------------I2S_EN_stretched flag generation----------------------------
----------------------------- (for status register)----------------------------
---	process(RST,CLK,I2S_EN)
---	begin
---		if (RST ='1') then
---			I2S_EN_stretched	<= '0';
---		elsif (I2S_EN='1') then
---			I2S_EN_stretched	<= '1';
---		elsif	(falling_edge(CLK)) then
---			I2S_EN_stretched <= '0';
---		end if;
---	end process;
+
+	process(RST,I2S_EN,SCK)
+	begin
+		if (RST='1' or I2S_EN='0') then
+			I2S_EN_delayed <='0';
+		elsif (falling_edge(SCK)) then
+			I2S_EN_delayed <= I2S_EN;
+		end if;
+	end process;
 
 	---------------WS generation----------------------------
 	ws_gen: prescaler
 	generic map (factor => 2*N)
 	port map(CLK_IN	=> SCK_n,--because we need WS to change when SCK falls
-				RST		=> RST,
-				CLK_OUT	=> WS
+				RST		=> prescaler_rst,
+				CLK_OUT	=> prescaler_out
 	);
+	prescaler_rst <= RST or I2S_EN_delayed;
+	
+	process(RST,start,sck_en,prescaler_out)
+	begin
+		if(RST='1' or start='1') then
+			WS <='0';
+		else
+			WS <= sck_en and (not prescaler_out);
+		end if;
+	end process;
 	
 	---------------WS_delayed generation----------------------------
 	process(RST,SCK,WS)
@@ -239,15 +247,12 @@ begin
 --	end process;
 	
 	---------------frame_number write-----------------------------
-	frames_w: process(RST,I2S_EN,WS,stop)
+	frames_w: process(RST,WS,stop)
 	begin
-		if (RST ='1' or I2S_EN = '1' or stop='1') then
+		if (RST ='1' or stop='1') then
 			frame_number <= 0;
 		elsif(rising_edge(WS))then
 			frame_number <= frame_number + 1;
---			if (frame_number = to_integer(unsigned(WORDS))+1) then
---				frame_number <= 0;
---			end if;
 		end if;
 
 	end process;

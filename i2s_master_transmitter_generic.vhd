@@ -65,7 +65,7 @@ architecture structure of i2s_master_transmitter_generic is
 	signal CLK: std_logic;--used to generate SCK (when sck_en = '1')
 	
 	signal ack_finished: std_logic;--active HIGH, indicates the ack was high in previous SCK cycle [0 1].
-	signal CLK_IN_n: std_logic;-- not CLK
+	signal SCK_n: std_logic;-- not SCK
 	signal bits_sent: natural;--number of bits transmitted
 	signal words_sent: natural;--number of words(bytes) transmitted
 	
@@ -104,7 +104,7 @@ begin
 	---------------WS generation----------------------------
 	ws_gen: prescaler
 	generic map (factor => 2*N)
-	port map(CLK_IN	=> SCK,
+	port map(CLK_IN	=> SCK_n,--because we need WS to change when SCK falls
 				RST		=> RST,
 				CLK_OUT	=> WS
 	);
@@ -162,6 +162,7 @@ begin
 	end process;
 	CLK <= CLK_IN;
 	SCK <= CLK when (sck_en = '1') else '1';
+	SCK_n <= not SCK;
 
 	---------------SD write----------------------------
 	--serial write on SD bus
@@ -182,13 +183,12 @@ begin
 	---------------fifo_sd_out write-----------------------------
 	fifo_w: process(RST,parallel_data_in,load,SCK,stop)
 	begin
-		if (load='1') then
+		if (RST='1' or load='1') then
 			fifo_sd_out <= parallel_data_in;
 		--updates fifo at falling edge of SCK so it can be read at rising_edge of SCK
 		elsif(falling_edge(SCK))then
 			fifo_sd_out <= fifo_sd_out(N-2 downto 0) & '0';--MSB is sent first
 		end if;
-
 	end process;
 	
 --	bits_sent_w: process(RST,stop,ack,tx,SCK)

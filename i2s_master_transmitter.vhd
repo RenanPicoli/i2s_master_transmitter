@@ -99,6 +99,10 @@ architecture structure of i2s_master_transmitter is
 	signal DR_wren:std_logic;--enables write value from D port
 	signal DR_ena:std_logic;--DR ENA (enables DR write)
 	
+	-- 8 stage fifos
+	signal left_fifo:array32(7 downto 0);
+	signal right_fifo:array32(7 downto 0);
+	
 	signal CR_in: std_logic_vector(31 downto 0);--CR input
 	signal CR_Q: std_logic_vector(31 downto 0);--CR output
 	signal CR_wren:std_logic;
@@ -115,7 +119,7 @@ begin
 				CLK_IN => CLK,
 				RST => RST,
 				I2S_EN => CR_Q(0),
-				left_data => x"0000_000F",
+				left_data => left_fifo(0),
 				right_data => x"0000_000A",
 				NFR => CR_Q(3 downto 1),
 				IACK => all_i2c_iack,
@@ -145,7 +149,7 @@ begin
 	--each stage of fifo stores a 32 bit word,
 	--if word length (audio depth) is less than 32 bits, only LSB of a fifo stage is transmitted
 	DR_wren <= address_decoder_wren(1);
-	DR_ena <=	DR_wren;
+	DR_ena <=	DR_wren;--DR_wren='1' indicates software write
 	DR_in <= D;-- write mode (master transmitter)
 	
 	DR: d_flip_flop port map(D => DR_in,
@@ -154,6 +158,17 @@ begin
 									ENA=> DR_ena,
 									Q=> DR_out
 									);
+	
+	--older data is available at position 0
+	l_fifo: process(RST,CLK,DR_out)
+	begin
+		if(RST='1')then
+			--reset fifo
+			left_fifo <= (others=>(others=>'0'));
+		elsif(falling_edge(CLK) and DR_wren='1') then--falling edge because data is latched in rising edge
+			left_fifo <= DR_out & left_fifo(7 downto 1);
+		end if;
+	end process;
 	
 	--control register:
 	--bits 6:4 DS data size, (DS+1)*4 is the word length to use for each channel (will be also half of a frame size).

@@ -7,8 +7,8 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
---use ieee.std_logic_unsigned.all;
---use ieee.numeric_std.all;--to_integer
+use ieee.std_logic_unsigned.all;--addition of std_logic_vector
+use ieee.numeric_std.all;--to_integer, unsigned
 use work.my_types.all;--array32
 
 entity i2s_master_transmitter is
@@ -63,9 +63,21 @@ architecture structure of i2s_master_transmitter is
 			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
 			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
+			pop: out std_logic;--requests another data to the fifo
 			SD: out std_logic;--data line
 			WS: out std_logic;--left/right clock
 			SCK: out std_logic--continuous clock (bit clock)
+	);
+	end component;
+	
+	component smart_fifo
+	port (
+			DATA_IN: in std_logic_vector(31 downto 0);--for register write
+			CLK: in std_logic;
+			RST: in std_logic;
+			WREN: in std_logic;--enables software write
+			POP: in std_logic;--tells the fifo to move oldest data to position 0 if there is valid data
+			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
 	);
 	end component;
 	
@@ -100,8 +112,8 @@ architecture structure of i2s_master_transmitter is
 	signal DR_ena:std_logic;--DR ENA (enables DR write)
 	
 	-- 8 stage fifos
-	signal left_fifo:array32(7 downto 0);
-	signal right_fifo:array32(7 downto 0);
+	signal left_data: std_logic_vector(31 downto 0);
+	signal pop: std_logic;--tells the fifo to provide another data
 	
 	signal CR_in: std_logic_vector(31 downto 0);--CR input
 	signal CR_Q: std_logic_vector(31 downto 0);--CR output
@@ -119,11 +131,12 @@ begin
 				CLK_IN => CLK,
 				RST => RST,
 				I2S_EN => CR_Q(0),
-				left_data => left_fifo(0),
+				left_data => left_data,
 				right_data => x"0000_000A",
 				NFR => CR_Q(3 downto 1),
 				IACK => all_i2c_iack,
 				IRQ => all_i2c_irq,
+				pop => pop,
 				WS => WS,
 				SD => SD,
 				SCK => SCK
@@ -160,15 +173,13 @@ begin
 									);
 	
 	--older data is available at position 0
-	l_fifo: process(RST,CLK,DR_out)
-	begin
-		if(RST='1')then
-			--reset fifo
-			left_fifo <= (others=>(others=>'0'));
-		elsif(falling_edge(CLK) and DR_wren='1') then--falling edge because data is latched in rising edge
-			left_fifo <= DR_out & left_fifo(7 downto 1);
-		end if;
-	end process;
+	--pop: tells the fifo to move oldest data to position 0 if there is valid data
+	l_fifo: smart_fifo port map(	DATA_IN => DR_out,
+											RST => RST,
+											CLK => CLK,
+											WREN => DR_wren,
+											POP => pop,
+											DATA_OUT => left_data);
 	
 	--control register:
 	--bits 6:4 DS data size, (DS+1)*4 is the word length to use for each channel (will be also half of a frame size).

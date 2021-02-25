@@ -100,7 +100,7 @@ begin
 		
 		--bits 7:0 data to be transmitted (goes to fifo)
 		ADDR <= "01";--DR address	
-		D <= x"0000_0095";-- 1001 0101	
+		D <= x"0000_0001";
 		WREN <= '1';
 		wait for TIME_RST + TIME_DELTA;
 

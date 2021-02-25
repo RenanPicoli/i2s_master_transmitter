@@ -26,6 +26,7 @@ entity i2s_master_transmitter_generic is
 			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
 			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
+			pop: out std_logic;--requests another data to the fifo
 			SD: buffer std_logic;--data line
 			WS: buffer std_logic;--left/right clock
 			SCK: buffer std_logic--continuous clock (bit clock)
@@ -167,6 +168,7 @@ begin
 	end process;
 	---------------load generation----------------------------
 	load <= WS xor WS_delayed;
+	pop <= load;
 	
 	---------------tx_data flag generation----------------------------
 --	process(tx_data,ack,ack_received,bits_sent,words_sent,WORDS,SCK,RST,stop)

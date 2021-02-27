@@ -92,6 +92,7 @@ begin
 	--I2S registers configuration	
 	master_setup:process
 	begin
+		wait for TIME_RST;
 --		--zeroes & DS[2:0] & NFR[2:0] & I2S_EN
 --		ADDR <= "00";--CR address
 --		D <= (31 downto 7 =>'0') & "000" & "010" & '0';--I2S_EN: 0; NFR: 010 (2); DS: 000 (4)
@@ -102,7 +103,7 @@ begin
 		ADDR <= "01";--DR address	
 		D <= x"0000_0001";
 		WREN <= '1';
-		wait for TIME_RST + TIME_DELTA;
+		wait for TIME_DELTA;
 
 		--zeroes & DS[2:0] & NFR[2:0] & I2S_EN
 		ADDR <= "00";--CR address, will start transfer

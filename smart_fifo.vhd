@@ -19,7 +19,7 @@ entity smart_fifo is
 	port (
 			DATA_IN: in std_logic_vector(31 downto 0);--for register write
 			CLK: in std_logic;
-			RST: in std_logic;
+			RST: in std_logic;--asynchronous reset
 			WREN: in std_logic;--enables software write
 			POP: in std_logic;--tells the fifo to move oldest data to position 0 if there is valid data
 			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
@@ -29,7 +29,7 @@ end smart_fifo;
 
 architecture structure of smart_fifo is
 --older data is available at position 0
---pop: tells the fifo to move oldest data to position 0 if there is valid data
+--pop: tells the fifo that data at 0 was read and can be discarded
 signal head: std_logic_vector(2 downto 0);--points to the position where newest data should arrive
 signal tail: std_logic_vector(2 downto 0);--points to the position where oldest valid data
 signal fifo: array32(7 downto 0);
@@ -48,11 +48,15 @@ begin
 				fifo(to_integer(unsigned(head))) <= DATA_IN;
 				head <= head + 1;
 			elsif (WREN='1' and POP='1'and tail>"000") then
-				fifo <= DATA_IN & fifo(7 downto 1);
-				tail <= tail - 1;
-			elsif (WREN='0' and POP='1' and tail>"000") then
-				fifo <= x"0000_0000" & fifo(7 downto 1);
-				tail <= tail - 1;
+				fifo <= DATA_IN & fifo(7 downto 1);--discards read data and pushes in new data
+				if (tail>"000") then
+					tail <= tail - 1;--decrements tail, if possible
+				end if;
+			elsif (WREN='0' and POP='1') then
+				fifo <= x"0000_0000" & fifo(7 downto 1);--discards read data
+				if (tail>"000") then
+					tail <= tail - 1;--decrements tail, if possible
+				end if;
 			end if;
 		end if;
 	end process;

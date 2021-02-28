@@ -104,6 +104,54 @@ begin
 		D <= x"0000_0001";
 		WREN <= '1';
 		wait for TIME_DELTA;
+		
+		--bits 7:0 data to be transmitted (goes to fifo)
+		ADDR <= "01";--DR address	
+		D <= x"0000_0002";
+		WREN <= '1';
+		wait for TIME_DELTA;
+		
+		--bits 7:0 data to be transmitted (goes to fifo)
+		ADDR <= "01";--DR address	
+		D <= x"0000_0003";
+		WREN <= '1';
+		wait for TIME_DELTA;
+		
+		--bits 7:0 data to be transmitted (goes to fifo)
+		ADDR <= "01";--DR address	
+		D <= x"0000_0004";
+		WREN <= '1';
+		wait for TIME_DELTA;
+		
+		--bits 7:0 data to be transmitted (goes to fifo)
+		ADDR <= "01";--DR address	
+		D <= x"0000_0005";
+		WREN <= '1';
+		wait for TIME_DELTA;
+		
+		--bits 7:0 data to be transmitted (goes to fifo)
+		ADDR <= "01";--DR address	
+		D <= x"0000_0006";
+		WREN <= '1';
+		wait for TIME_DELTA;
+		
+		--bits 7:0 data to be transmitted (goes to fifo)
+		ADDR <= "01";--DR address	
+		D <= x"0000_0007";
+		WREN <= '1';
+		wait for TIME_DELTA;
+		
+		--bits 7:0 data to be transmitted (goes to fifo)
+		ADDR <= "01";--DR address	
+		D <= x"0000_0008";
+		WREN <= '1';
+		wait for TIME_DELTA;
+		
+		--bits 7:0 data to be transmitted (goes to fifo)
+--		ADDR <= "01";--DR address	
+--		D <= x"0000_0009";
+--		WREN <= '1';
+--		wait for TIME_DELTA;
 
 		--zeroes & DS[2:0] & NFR[2:0] & I2S_EN
 		ADDR <= "00";--CR address, will start transfer

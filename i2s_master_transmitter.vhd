@@ -23,7 +23,7 @@ entity i2s_master_transmitter is
 			Q: out std_logic_vector(31 downto 0);--for register read
 			IRQ: out std_logic;--interrupt request
 			SD: out std_logic;--data line
-			WS: out std_logic;--left/right clock
+			WS: buffer std_logic;--left/right clock
 			SCK: out std_logic--continuous clock (bit clock)
 	);
 end i2s_master_transmitter;
@@ -65,7 +65,7 @@ architecture structure of i2s_master_transmitter is
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			pop: out std_logic;--requests another data to the fifo
 			SD: out std_logic;--data line
-			WS: out std_logic;--left/right clock
+			WS: out std_logic;--left/right clock (0 left, 1 right)
 			SCK: out std_logic--continuous clock (bit clock)
 	);
 	end component;
@@ -113,7 +113,9 @@ architecture structure of i2s_master_transmitter is
 	
 	-- 8 stage fifos
 	signal left_data: std_logic_vector(31 downto 0);
-	signal pop: std_logic;--tells the fifo to provide another data
+	signal left_pop: std_logic;--tells the (left) fifo to provide another data
+	signal right_pop: std_logic;--tells the (left) fifo to provide another data	
+	signal pop: std_logic;--tells the (left) fifo to provide another data
 	
 	signal CR_in: std_logic_vector(31 downto 0);--CR input
 	signal CR_Q: std_logic_vector(31 downto 0);--CR output
@@ -174,11 +176,13 @@ begin
 	
 	--older data is available at position 0
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
+	left_pop <= pop and (not WS);
+	right_pop <= pop and WS;
 	l_fifo: smart_fifo port map(	DATA_IN => DR_out,
 											RST => RST,
 											CLK => CLK,
 											WREN => DR_wren,
-											POP => pop,
+											POP => left_pop,
 											DATA_OUT => left_data);
 	
 	--control register:

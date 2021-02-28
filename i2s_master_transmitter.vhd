@@ -114,7 +114,10 @@ architecture structure of i2s_master_transmitter is
 	-- 8 stage fifos
 	signal left_data: std_logic_vector(31 downto 0);
 	signal left_pop: std_logic;--tells the (left) fifo to provide another data
-	signal right_pop: std_logic;--tells the (left) fifo to provide another data	
+	signal left_wren: std_logic;--enables write on left fifo
+	signal right_data: std_logic_vector(31 downto 0);
+	signal right_pop: std_logic;--tells the (left) fifo to provide another data
+	signal right_wren: std_logic;--enables write on right fifo	
 	signal pop: std_logic;--tells the (left) fifo to provide another data
 	
 	signal CR_in: std_logic_vector(31 downto 0);--CR input
@@ -134,7 +137,7 @@ begin
 				RST => RST,
 				I2S_EN => CR_Q(0),
 				left_data => left_data,
-				right_data => x"0000_000A",
+				right_data => right_data,
 				NFR => CR_Q(3 downto 1),
 				IACK => all_i2c_iack,
 				IRQ => all_i2c_irq,
@@ -177,15 +180,27 @@ begin
 	--older data is available at position 0
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
 	left_pop <= pop and (not WS);
-	right_pop <= pop and WS;
+	left_wren <= DR_wren and (not CR_Q(7));
 	l_fifo: smart_fifo port map(	DATA_IN => DR_out,
 											RST => RST,
 											CLK => CLK,
-											WREN => DR_wren,
+											WREN => left_wren,
 											POP => left_pop,
 											DATA_OUT => left_data);
 	
+	--older data is available at position 0
+	--pop: tells the fifo to move oldest data to position 0 if there is valid data
+	right_pop <= pop and WS;
+	right_wren <= DR_wren and (CR_Q(7));
+	r_fifo: smart_fifo port map(	DATA_IN => DR_out,
+											RST => RST,
+											CLK => CLK,
+											WREN => right_wren,
+											POP => right_pop,
+											DATA_OUT => right_data);
+	
 	--control register:
+	--bit 7 LRFS: left-rifgt fifo select: 0 selects left fifo, 1 selects right fifo
 	--bits 6:4 DS data size, (DS+1)*4 is the word length to use for each channel (will be also half of a frame size).
 	--		Each fifo stage contains two of these words (one frame), right-aligned.
 	--		(000: 4 bit, 001: 8 bit, 010: 12 bit, 011: 16 bit, 100: 20 bit, 101: 24 bit, 110: 28 bit, 111: 32 bit)

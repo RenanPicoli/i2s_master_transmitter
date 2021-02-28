@@ -171,11 +171,21 @@ begin
 		
 		--nop
 		WREN <= '0';		
-		wait for 4*TIME_DELTA;
+		wait for 3*TIME_DELTA;
 		
 		--bits 7:0 data to be transmitted (goes to fifo)
 		ADDR <= "01";--DR address	
 		D <= x"0000_000A";
+		WREN <= '1';
+		wait for TIME_DELTA;
+		
+		--nop
+		WREN <= '0';		
+		wait for 1*TIME_DELTA;
+		
+		--bits 7:0 data to be transmitted (goes to fifo)
+		ADDR <= "01";--DR address	
+		D <= x"0000_000B";
 		WREN <= '1';
 		wait for TIME_DELTA;
 		

@@ -30,7 +30,7 @@ end smart_fifo;
 architecture structure of smart_fifo is
 --older data is available at position 0
 --pop: tells the fifo that data at 0 was read and can be discarded
-signal head: std_logic_vector(3 downto 0);--points to the position where newest data should arrive
+signal head: std_logic_vector(3 downto 0);--points to the position where newest data should arrive, MSB is a overflow bit
 signal fifo: array32(7 downto 0);
 
 begin

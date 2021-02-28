@@ -30,7 +30,7 @@ end smart_fifo;
 architecture structure of smart_fifo is
 --older data is available at position 0
 --pop: tells the fifo that data at 0 was read and can be discarded
-signal head: std_logic_vector(2 downto 0);--points to the position where newest data should arrive
+signal head: std_logic_vector(3 downto 0);--points to the position where newest data should arrive
 signal fifo: array32(7 downto 0);
 
 begin
@@ -40,15 +40,20 @@ begin
 		if(RST='1')then
 			--reset fifo
 			fifo <= (others=>(others=>'0'));
-			head<="000";
+			head<="0000";
 		elsif(falling_edge(CLK)) then--falling edge because data is latched in rising edge
 			if (WREN='1' and POP='0') then
-				fifo(to_integer(unsigned(head))) <= DATA_IN;
-				head <= head + 1;
+				if (head="1000") then--current head is an invalid position, shift data, discard oldest data
+					fifo <= DATA_IN & fifo(7 downto 1);
+				else--head is valid position
+					fifo(to_integer(unsigned(head))) <= DATA_IN;
+					head <= head + 1;
+				end if;
 			elsif (WREN='1' and POP='1') then
 				fifo <= DATA_IN & fifo(7 downto 1);--discards read data and pushes in new data
 			elsif (WREN='0' and POP='1') then
-				fifo <= x"0000_0000" & fifo(7 downto 1);--discards read data
+				fifo <= x"0000_0000" & fifo(7 downto 1);--discards read data, puts invalid data
+				head <= head - 1;
 			end if;
 		end if;
 	end process;

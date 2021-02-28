@@ -28,7 +28,7 @@ entity i2s_master_transmitter_generic is
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			pop: out std_logic;--requests another data to the fifo
 			SD: buffer std_logic;--data line
-			WS: buffer std_logic;--left/right clock
+			WS: buffer std_logic;--left/right clock (0 left, 1 right)
 			SCK: buffer std_logic--continuous clock (bit clock)
 	);
 end i2s_master_transmitter_generic;
@@ -111,6 +111,7 @@ begin
 	);
 	prescaler_rst <= RST or I2S_EN_delayed;
 	
+	---------------WS generation----------------------------
 	process(RST,start,sck_en,prescaler_out)
 	begin
 		if(RST='1' or start='1') then
@@ -120,13 +121,13 @@ begin
 		end if;
 	end process;
 	
-	---------------WS_delayed generation----------------------------
-	process(RST,SCK,WS)
+	---------------WS_delayed generation---------------------
+	process(RST,SCK,WS,sck_en)
 	begin
-		if (RST ='1') then
+		if (RST ='1' or sck_en='0') then
 			WS_delayed	<= '0';
 		elsif	(rising_edge(SCK)) then
-			WS_delayed <= WS;
+			WS_delayed <= WS;-- and sck_en prevents load after end of transmission (WS might have a falling edge)
 		end if;
 	end process;
 	

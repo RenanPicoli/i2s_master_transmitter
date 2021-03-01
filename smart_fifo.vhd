@@ -22,6 +22,7 @@ entity smart_fifo is
 			RST: in std_logic;--asynchronous reset
 			WREN: in std_logic;--enables software write
 			POP: in std_logic;--tells the fifo to move oldest data to position 0 if there is valid data
+			FULL: out std_logic;--'1' indicates that fifo is full
 			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
 	);
 end smart_fifo;
@@ -59,5 +60,6 @@ begin
 	end process;
 	
 	DATA_OUT <= fifo(0);
+	FULL		<= head(3);
 	
 end structure;

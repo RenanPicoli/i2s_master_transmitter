@@ -116,19 +116,26 @@ architecture structure of i2s_master_transmitter is
 	signal left_data: std_logic_vector(31 downto 0);
 	signal left_pop: std_logic;--tells the (left) fifo to provide another data
 	signal left_wren: std_logic;--enables write on left fifo
+	signal left_full: std_logic;--left fifo is full
 	signal right_data: std_logic_vector(31 downto 0);
 	signal right_pop: std_logic;--tells the (left) fifo to provide another data
-	signal right_wren: std_logic;--enables write on right fifo	
+	signal right_wren: std_logic;--enables write on right fifo
+	signal right_full: std_logic;--right fifo is full
 	signal pop: std_logic;--tells the (left) fifo to provide another data
 	
 	signal CR_in: std_logic_vector(31 downto 0);--CR input
 	signal CR_Q: std_logic_vector(31 downto 0);--CR output
 	signal CR_wren:std_logic;
 	signal CR_ena:std_logic;
+		
+	signal SR_in: std_logic_vector(31 downto 0);--SR input
+	signal SR_Q: std_logic_vector(31 downto 0);--SR output
+	signal SR_wren:std_logic;
+	signal SR_ena:std_logic;
 	
-	signal all_registers_output: array32 (2 downto 0);
-	signal all_periphs_rden: std_logic_vector(2 downto 0);
-	signal address_decoder_wren: std_logic_vector(2 downto 0);
+	signal all_registers_output: array32 (3 downto 0);
+	signal all_periphs_rden: std_logic_vector(3 downto 0);
+	signal address_decoder_wren: std_logic_vector(3 downto 0);
 begin
 	
 	i2s: i2s_master_transmitter_generic
@@ -187,6 +194,7 @@ begin
 											CLK => CLK,
 											WREN => left_wren,
 											POP => left_pop,
+											FULL => left_full,
 											DATA_OUT => left_data);
 	
 	--older data is available at position 0
@@ -198,6 +206,7 @@ begin
 											CLK => CLK,
 											WREN => right_wren,
 											POP => right_pop,
+											FULL => right_full,
 											DATA_OUT => right_data);
 	
 	--control register:
@@ -213,17 +222,31 @@ begin
 	CR_ena <= '1';
 	CR_wren <= address_decoder_wren(0);
 	CR: d_flip_flop port map(D => CR_in,
-									RST=> RST,--resets all previous history of input signal
-									CLK=> CLK,--sampling clock
+									RST=> RST,
+									CLK=> CLK,
 									ENA=> CR_ena,
 									Q=> CR_Q
+									);
+	
+	--status register (write-only):
+	--bit 1: RFULL (right fifo is full)
+	--bit 0: LFULL (left fifo is full)
+	SR_in <= (31 downto 2 => '0') & right_full & left_full;
+	SR_ena <= '1';--always writes, updating status register
+	SR_wren <= address_decoder_wren(3);--not used, just to keep form
+	SR: d_flip_flop port map(D => SR_in,
+									RST=> RST,
+									CLK=> CLK,
+									ENA=> SR_ena,
+									Q=> SR_Q
 									);
 
 -------------------------- address decoder ---------------------------------------------------
 	--addr 00: CR
 	--addr 01: DR
 	--addr 10: irq_ctrl (interrupts pending)
-	all_registers_output <= (0=> CR_Q,1=> DR_out,2=> irq_ctrl_Q);
+	--addr 11: SR (status register: read-only)
+	all_registers_output <= (0=> CR_Q,1=> DR_out,2=> irq_ctrl_Q,3=> SR_Q);
 	decoder: address_decoder_register_map
 	generic map(N => 2)
 	port map(ADDR => ADDR,

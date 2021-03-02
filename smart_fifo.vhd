@@ -24,6 +24,7 @@ entity smart_fifo is
 			POP: in std_logic;--tells the fifo to move oldest data to position 0 if there is valid data
 			FULL: out std_logic;--'1' indicates that fifo is full
 			EMPTY: out std_logic;--'1' indicates that fifo is empty
+			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
 			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
 	);
 end smart_fifo;
@@ -63,5 +64,14 @@ begin
 	DATA_OUT <= fifo(0);
 	FULL		<= head(3);
 	EMPTY		<= '1' when head="0000" else '0';
+	
+	process(RST,CLK,head,WREN,POP)
+	begin
+		if (RST='1') then
+			OVF <= '0';
+		elsif(falling_edge(CLK))then--updates OVF while the data is written in fifo
+			OVF	<= head(3) and WREN and (not POP);--FULL and WREN='1' and POP='0'
+		end if;
+	end process;
 	
 end structure;

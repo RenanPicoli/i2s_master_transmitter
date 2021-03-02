@@ -79,6 +79,7 @@ architecture structure of i2s_master_transmitter is
 			POP: in std_logic;--tells the fifo to move oldest data to position 0 if there is valid data
 			FULL: out std_logic;--'1' indicates that fifo is full
 			EMPTY: out std_logic;--'1' indicates that fifo is empty
+			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
 			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
 	);
 	end component;
@@ -119,11 +120,13 @@ architecture structure of i2s_master_transmitter is
 	signal left_wren: std_logic;--enables write on left fifo
 	signal left_full: std_logic;--left fifo is full
 	signal left_empty: std_logic;--left fifo is empty
+	signal left_overflow: std_logic;--left fifo is overflowing
 	signal right_data: std_logic_vector(31 downto 0);
 	signal right_pop: std_logic;--tells the (left) fifo to provide another data
 	signal right_wren: std_logic;--enables write on right fifo
 	signal right_full: std_logic;--right fifo is full
 	signal right_empty: std_logic;--right fifo is empty
+	signal right_overflow: std_logic;--right fifo is overflowing
 	signal pop: std_logic;--tells the (left) fifo to provide another data
 	
 	signal CR_in: std_logic_vector(31 downto 0);--CR input
@@ -199,6 +202,7 @@ begin
 											POP => left_pop,
 											FULL => left_full,
 											EMPTY => left_empty,
+											OVF => left_overflow,
 											DATA_OUT => left_data);
 	
 	--older data is available at position 0
@@ -212,6 +216,7 @@ begin
 											POP => right_pop,
 											FULL => right_full,
 											EMPTY => right_empty,
+											OVF => right_overflow,
 											DATA_OUT => right_data);
 	
 	--control register:
@@ -234,11 +239,13 @@ begin
 									);
 	
 	--status register (write-only):
+	--bit 5: ROVF (right fifo is overflowing in this clock cycle)
+	--bit 4: LOVF (left fifo is overflowing in this clock cycle)
 	--bit 3: REMP (right fifo is empty)
 	--bit 2: LEMP (left fifo is empty)
 	--bit 1: RFULL (right fifo is full)
 	--bit 0: LFULL (left fifo is full)
-	SR_in <= (31 downto 4 => '0') & right_empty & left_empty & right_full & left_full;
+	SR_in <= (31 downto 6 => '0') & right_overflow & left_overflow & right_empty & left_empty & right_full & left_full;
 	SR_ena <= '1';--always writes, updating status register
 	SR_wren <= address_decoder_wren(3);--not used, just to keep form
 	SR: d_flip_flop port map(D => SR_in,

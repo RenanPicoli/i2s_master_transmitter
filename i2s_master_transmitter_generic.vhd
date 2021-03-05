@@ -48,13 +48,6 @@ architecture structure of i2s_master_transmitter_generic is
 	
 	--signals representing I2S transfer state
 	signal tx: std_logic;--flag indicating it is transmitting (address or data)
-	signal tx_addr: std_logic;--flag indicating it is transmitting address
-	signal tx_data: std_logic;--flag indicating it is transmitting data
-	signal ack: std_logic;--active HIGH, indicates the state when ack should be sent or received
-	signal ack_addr: std_logic;--active HIGH, indicates the state when ack of address should be received
-	signal ack_data: std_logic;--active HIGH, indicates the state when ack of word (byte) should be sent or received
-	signal ack_received: std_logic;--active HIGH, indicates slave-receiver acknowledged
-	signal ack_addr_received: std_logic;--active HIGH, indicates slave-receiver acknowledged
 	signal start: std_logic;-- indicates start bit being transmitted (also applies to repeated start)
 	signal stop: std_logic;-- indicates stop bit being transmitted
 	signal stop_stretched: std_logic;-- indicates stop bit being transmitted (useful to send last bit)
@@ -69,7 +62,6 @@ architecture structure of i2s_master_transmitter_generic is
 	signal prescaler_rst: std_logic;--prescaler reset
 	signal CLK: std_logic;--used to generate SCK (when sck_en = '1')
 	
-	signal ack_finished: std_logic;--active HIGH, indicates the ack was high in previous SCK cycle [0 1].
 	signal SCK_n: std_logic;-- not SCK
 	signal bits_sent: natural;--number of bits transmitted
 	signal frame_number: natural;--number of the frame (pairs left-right data) being transmitted
@@ -77,9 +69,6 @@ architecture structure of i2s_master_transmitter_generic is
 	signal sck_en: std_logic;--enables SCK to follow CLK
 	
 begin
---	tx <= tx_addr or tx_data;
---	ack <= ack_addr or ack_data;
-
 	---------------start flag generation----------------------------
 	process(RST,I2S_EN,CLK_IN)
 	begin
@@ -182,17 +171,17 @@ begin
 		end if;
 	end process;
 	
-	---------------tx_data flag generation----------------------------
---	process(tx_data,ack,ack_received,bits_sent,words_sent,WORDS,SCK,RST,stop)
---	begin
---		if (RST ='1' or stop='1') then
---			tx_data	<= '0';
---		elsif (tx_data='1' and ack='1' and bits_sent=N) then
---			tx_data	<= '0';
---		elsif	(ack='1' and ack_received='1' and (words_sent/=to_integer(unsigned(WORDS))+1) and falling_edge(SCK)) then
---			tx_data <= '1';
---		end if;
---	end process;
+	---------------tx flag generation----------------------------
+	------this complex expression aims to make--------------------
+	----the tx signal sampled at rising_edge perfectly aligned with bit transmission----
+	process(RST,sck_en,stop_stretched,CLK)
+	begin
+		if (RST ='1') then
+			tx	<= '0';
+		elsif (falling_edge(CLK)) then
+			tx	<= sck_en and not stop_stretched;
+		end if;
+	end process;
 	
 	---------------SCK generation----------------------------
 	process(start,stop_stretched_2,CLK_IN,RST)
@@ -240,26 +229,6 @@ begin
 		end if;
 	end process;
 	
---	bits_sent_w: process(RST,stop,ack,tx,SCK)
---	begin
---		if (RST ='1' or stop='1') then
---			bits_sent <= 0;
---		elsif(ack='1') then
---			bits_sent <= 0;
---		elsif(tx='1' and rising_edge(SCK))then
---			bits_sent <= bits_sent + 1;
---		end if;
---	end process;
---	
---	process(RST,stop,ack_data,fifo_SD_in,DR_in_shift)
---	begin
---		if (RST ='1' or stop='1') then
---			DR_in_shift <= (others=>'0');
---		elsif(rising_edge(ack_data)) then
---			DR_in_shift <= (31 downto N =>'0') & fifo_SD_in;
---		end if;
---	end process;
-	
 	---------------frame_number write-----------------------------
 	frames_w: process(RST,WS,stop)
 	begin
@@ -270,59 +239,6 @@ begin
 		end if;
 
 	end process;
-	
---	---------------ack_addr flag generation----------------------
---	process(tx_addr,bits_sent,SCK,RST,stop)
---	begin
---		if (RST ='1' or stop='1') then
---			ack_addr <= '0';
---		elsif	(falling_edge(SCK)) then
---			if (tx_addr='1' and bits_sent=N) then
---				ack_addr <= '1';
---			else
---				ack_addr <= '0';
---			end if;
---		end if;
---	end process;
---	
---	---------------ack_data flag generation----------------------
---	--ack data phase: master or slave should acknowledge, depending on ADDR(0)
---	--a single N-bit word was sent-------------------
---	process(tx_data,bits_sent,SCK,RST,stop)
---	begin
---		if (RST ='1' or stop='1') then
---			ack_data <= '0';
---		elsif	(falling_edge(SCK)) then
---			if (tx_data='1' and bits_sent=N) then
---				ack_data <= '1';
---			else
---				ack_data <= '0';
---			end if;
---		end if;
---	end process;
---
---	---------------ack_received flag generation----------------------------
---	process(ack,ack_received,SCK,SD,RST,stop)
---	begin
---		if (RST ='1' or stop='1') then
---			ack_received <= '0';
---			--to_x01 converts 'H','L' to '1','0', respectively. Needed only IN SIMULATION
---		elsif	(rising_edge(SCK)) then
---			ack_received <= ack and not(to_x01(SD));
---		end if;
---	end process;
---	
---	---------------ack_finished flag generation----------------------------
---	ack_f: process(ack,SCK,SD,RST,stop)
---	begin
---		if (RST ='1') then
---			ack_finished <= '0';
---		elsif (SCK='1') then
---			ack_finished <= '0';
---		elsif	(falling_edge(SCK)) then
---			ack_finished <= ack;--active HIGH, indicates the ack was high in previous SCK cycle [0 1].
---		end if;
---	end process;
 --	
 --	---------------IRQ BTF----------------------------
 --	---------byte transfer finished-------------------
@@ -351,6 +267,5 @@ begin
 --			IRQ(1) <= '1';
 --		end if;
 --	end process;
-
 	
 end structure;

@@ -64,6 +64,7 @@ architecture structure of i2s_master_transmitter is
 			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			pop: out std_logic;--requests another data to the fifo
+			TX: out std_logic;-- indicates transmission
 			SD: out std_logic;--data line
 			WS: out std_logic;--left/right clock (0 left, 1 right)
 			SCK: out std_logic--continuous clock (bit clock)
@@ -102,6 +103,7 @@ architecture structure of i2s_master_transmitter is
 	
 	constant N: natural := 4;--number of bits in each data written/read
 	signal words: std_logic_vector(1 downto 0);--00: 1 word; 01:2 words; 10: 3 words (unused); 11: 4 words
+	signal i2s_tx: std_logic;--flag indicating I2S is transmitting
 	signal all_i2c_irq: std_logic_vector(1 downto 0);--0: successfully transmitted all words; 1: NACK received
 	signal all_i2c_iack: std_logic_vector(1 downto 0);--0: successfully transmitted all words; 1: NACK received
 	
@@ -156,6 +158,7 @@ begin
 				IACK => all_i2c_iack,
 				IRQ => all_i2c_irq,
 				pop => pop,
+				TX => i2s_tx,
 				WS => WS,
 				SD => SD,
 				SCK => SCK
@@ -239,13 +242,14 @@ begin
 									);
 	
 	--status register (write-only):
+	--bit 6: TX (I2S is transmitting)
 	--bit 5: ROVF (right fifo is overflowing in this clock cycle)
 	--bit 4: LOVF (left fifo is overflowing in this clock cycle)
 	--bit 3: REMP (right fifo is empty)
 	--bit 2: LEMP (left fifo is empty)
 	--bit 1: RFULL (right fifo is full)
 	--bit 0: LFULL (left fifo is full)
-	SR_in <= (31 downto 6 => '0') & right_overflow & left_overflow & right_empty & left_empty & right_full & left_full;
+	SR_in <= (31 downto 7 => '0') & i2s_tx & right_overflow & left_overflow & right_empty & left_empty & right_full & left_full;
 	SR_ena <= '1';--always writes, updating status register
 	SR_wren <= address_decoder_wren(3);--not used, just to keep form
 	SR: d_flip_flop port map(D => SR_in,

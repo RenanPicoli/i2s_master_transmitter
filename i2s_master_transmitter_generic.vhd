@@ -27,6 +27,7 @@ entity i2s_master_transmitter_generic is
 			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
 			pop: out std_logic;--requests another data to the fifo
+			TX: out std_logic;-- indicates transmission
 			SD: buffer std_logic;--data line
 			WS: buffer std_logic;--left/right clock (0 left, 1 right)
 			SCK: buffer std_logic--continuous clock (bit clock)
@@ -47,7 +48,6 @@ architecture structure of i2s_master_transmitter_generic is
 	signal fifo_SD_in: std_logic_vector(N-1 downto 0);-- data read from SD: one byte plus start and stop bits
 	
 	--signals representing I2S transfer state
-	signal tx: std_logic;--flag indicating it is transmitting (address or data)
 	signal start: std_logic;-- indicates start bit being transmitted (also applies to repeated start)
 	signal stop: std_logic;-- indicates stop bit being transmitted
 	signal stop_stretched: std_logic;-- indicates stop bit being transmitted (useful to send last bit)
@@ -171,15 +171,15 @@ begin
 		end if;
 	end process;
 	
-	---------------tx flag generation----------------------------
+	---------------TX flag generation----------------------------
 	------this complex expression aims to make--------------------
-	----the tx signal sampled at rising_edge perfectly aligned with bit transmission----
+	----the TX signal sampled at rising_edge perfectly aligned with bit transmission----
 	process(RST,sck_en,stop_stretched,CLK)
 	begin
 		if (RST ='1') then
-			tx	<= '0';
+			TX	<= '0';
 		elsif (falling_edge(CLK)) then
-			tx	<= sck_en and not stop_stretched;
+			TX	<= sck_en and not stop_stretched;
 		end if;
 	end process;
 	

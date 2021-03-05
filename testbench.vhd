@@ -247,6 +247,17 @@ begin
 		wait for TIME_DELTA;
 		
 		WREN <= '0';
+		wait for 125 us;
+		ADDR <= "10";-- irq controller address	
+		D <= x"0000_0000";--zeroes irq line 0
+		WREN <= '1';
+		wait for TIME_DELTA;
+		WREN <= '0';
+--		ADDR <= "00";--CR address, will start transfer
+--		D<=(31 downto 8 =>'0') & '0' & "000" & "100" & '1';--I2S_EN: 1; NFR: 100 (4); DS: 000 (4)
+--		WREN <= '1';
+--		wait for TIME_DELTA;
+--		WREN <= '0';
 		wait;--process executes once
 	end process master_setup;
 	
@@ -272,5 +283,6 @@ begin
 --	end process slave_setup;
 	
 	RST <= '1', '0' after TIME_RST;--reset common to slave and master
+	IACK <= '0', '1' after 300 us, '0' after 310 us;
 	
 end architecture test;

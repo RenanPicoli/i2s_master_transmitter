@@ -61,8 +61,8 @@ architecture structure of i2s_master_transmitter is
 			left_data: in std_logic_vector(31 downto 0);--left channel
 			right_data: in std_logic_vector(31 downto 0);--right channel
 			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
-			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
-			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
+			IACK: in std_logic_vector(0 downto 0);--acknowledgement of interrupt request: successfully transmitted all words;
+			IRQ: out std_logic_vector(0 downto 0);--interrupt request: successfully transmitted all words;
 			pop: out std_logic;--requests another data to the fifo
 			TX: out std_logic;-- indicates transmission
 			SD: out std_logic;--data line
@@ -104,8 +104,8 @@ architecture structure of i2s_master_transmitter is
 	constant N: natural := 4;--number of bits in each data written/read
 	signal words: std_logic_vector(1 downto 0);--00: 1 word; 01:2 words; 10: 3 words (unused); 11: 4 words
 	signal i2s_tx: std_logic;--flag indicating I2S is transmitting
-	signal all_i2c_irq: std_logic_vector(1 downto 0);--0: successfully transmitted all words; 1: NACK received
-	signal all_i2c_iack: std_logic_vector(1 downto 0);--0: successfully transmitted all words; 1: NACK received
+	signal all_i2s_irq: std_logic_vector(0 downto 0);--successfully transmitted all words
+	signal all_i2s_iack: std_logic_vector(0 downto 0);
 	
 	signal irq_ctrl_Q: std_logic_vector(31 downto 0);
 	signal irq_ctrl_rden: std_logic;-- not used, just to keep form
@@ -155,8 +155,8 @@ begin
 				left_data => left_data,
 				right_data => right_data,
 				NFR => CR_Q(3 downto 1),
-				IACK => all_i2c_iack,
-				IRQ => all_i2c_irq,
+				IACK => all_i2s_iack,
+				IRQ => all_i2s_irq,
 				pop => pop,
 				TX => i2s_tx,
 				WS => WS,
@@ -164,19 +164,20 @@ begin
 				SCK => SCK
 	);
 	
+	--bit 0: BTF (sucessful transfer)
 	irq_ctrl_wren <= address_decoder_wren(2);
 	irq_ctrl_rden <= '1';--not necessary, just to keep form
 	irq_ctrl: interrupt_controller
-	generic map (L => 2)
+	generic map (L => 1)
 	port map(D => D,
 				CLK => CLK,
 				RST => RST,
 				WREN => irq_ctrl_wren,
 				RDEN => irq_ctrl_rden,
-				IRQ_IN => all_i2c_irq,
+				IRQ_IN => all_i2s_irq,
 				IRQ_OUT => IRQ,
 				IACK_IN => IACK,
-				IACK_OUT => all_i2c_iack,
+				IACK_OUT => all_i2s_iack,
 				output => irq_ctrl_Q
 	);
 	

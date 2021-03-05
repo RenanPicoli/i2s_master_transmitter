@@ -24,8 +24,8 @@ entity i2s_master_transmitter_generic is
 			left_data: in std_logic_vector(31 downto 0);--left channel
 			right_data: in std_logic_vector(31 downto 0);--right channel
 			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
-			IACK: in std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
-			IRQ: out std_logic_vector(1 downto 0);--interrupt request: 0: successfully transmitted all words; 1: NACK received
+			IACK: in std_logic_vector(0 downto 0);--acknowledgement of interrupt request: successfully transmitted all words;
+			IRQ: out std_logic_vector(0 downto 0);--interrupt request: successfully transmitted all words;
 			pop: out std_logic;--requests another data to the fifo
 			TX: out std_logic;-- indicates transmission
 			SD: buffer std_logic;--data line
@@ -65,6 +65,7 @@ architecture structure of i2s_master_transmitter_generic is
 	signal SCK_n: std_logic;-- not SCK
 	signal bits_sent: natural;--number of bits transmitted
 	signal frame_number: natural;--number of the frame (pairs left-right data) being transmitted
+	signal frame_number_delayed: natural;--needs a delay to be read after stop rising_edge
 	
 	signal sck_en: std_logic;--enables SCK to follow CLK
 	
@@ -239,33 +240,28 @@ begin
 		end if;
 
 	end process;
---	
---	---------------IRQ BTF----------------------------
---	---------byte transfer finished-------------------
---	----transmitted all words successfully------------
---	process(RST,IACK,stop,words_sent,WORDS)
---	begin
---		if(RST='1') then
---			IRQ(0) <= '0';
---		elsif (IACK(0) ='1') then
---			IRQ(0) <= '0';
---		elsif(rising_edge(stop) and (words_sent=to_integer(unsigned(WORDS))+1)) then
---			IRQ(0) <= '1';
---		end if;
---	end process;
---	
---	---------------IRQ NACK---------------------------
---	-------------NACK received------------------------
---	process(RST,IACK,ack,ack_finished,ack_received,ack_addr_received,stop,SCK)
---	begin
---		if(RST='1') then
---			IRQ(1) <= '0';
---		elsif (IACK(1) ='1') then
---			IRQ(1) <= '0';
---		elsif(ack='0' and ack_finished='1' and ack_received='0'
---					and not(stop='1') and SCK='0') then
---			IRQ(1) <= '1';
---		end if;
---	end process;
+	
+	process(RST,frame_number,CLK)
+	begin
+		if (RST='1') then
+			frame_number_delayed <= 0;
+		elsif (rising_edge(CLK)) then--rising_edge because stop rises in the falling edge
+			frame_number_delayed <= frame_number;
+		end if;		
+	end process;
+	
+	---------------IRQ BTF----------------------------
+	---------byte transfer finished-------------------
+	----transmitted all words successfully------------
+	process(RST,I2S_EN,IACK,frame_number_delayed,stop,NFR)
+	begin
+		if(RST='1') then
+			IRQ(0) <= '0';
+		elsif (IACK(0) ='1' or I2S_EN='1') then--if the processor decides not to acknowledge, clears the IRQ when new transmission starts
+			IRQ(0) <= '0';
+		elsif(rising_edge(stop) and (frame_number_delayed=to_integer(unsigned(NFR)))) then--if NFR=000, stop never rises
+			IRQ(0) <= '1';
+		end if;
+	end process;
 	
 end structure;

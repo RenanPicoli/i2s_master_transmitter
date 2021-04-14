@@ -14,7 +14,7 @@ use work.my_types.all;--array32
 entity i2s_master_transmitter is
 	port (
 			D: in std_logic_vector(31 downto 0);--for register write
-			ADDR: in std_logic_vector(1 downto 0);--address offset of registers relative to peripheral base address
+			ADDR: in std_logic_vector(2 downto 0);--address offset of registers relative to peripheral base address
 			CLK: in std_logic;--for register read/write, also used to generate SCK
 			RST: in std_logic;--reset
 			WREN: in std_logic;--enables register write
@@ -29,17 +29,21 @@ entity i2s_master_transmitter is
 end i2s_master_transmitter;
 
 architecture structure of i2s_master_transmitter is
-	component address_decoder_register_map
-	--N: address width in bits
-	--boundaries: upper limits of each end (except the last, which is 2**N-1)
-	generic	(N: natural);
-	port(	ADDR: in std_logic_vector(N-1 downto 0);-- input
+	component address_decoder_memory_map
+	--N: word address width in bits
+	--B boundaries: list of values of the form (starting address,final address) of all peripherals, written as integers,
+	--list MUST BE "SORTED" (start address(i) < final address(i) < start address (i+1)),
+	--values OF THE FORM: "(b1 b2..bN 0..0),(b1 b2..bN 1..1)"
+	generic	(N: natural; B: boundaries);
+	port(	ADDR: in std_logic_vector(N-1 downto 0);-- input, it is a word address
 			RDEN: in std_logic;-- input
 			WREN: in std_logic;-- input
-			WREN_OUT: out std_logic_vector;-- output
 			data_in: in array32;-- input: outputs of all peripheral/registers
+			RDEN_OUT: out std_logic_vector;-- output
+			WREN_OUT: out std_logic_vector;-- output
 			data_out: out std_logic_vector(31 downto 0)-- data read
 	);
+
 	end component;
 	
 	component d_flip_flop
@@ -88,6 +92,7 @@ architecture structure of i2s_master_transmitter is
 	component interrupt_controller
 	generic	(L: natural);--L: number of IRQ lines
 	port(	D: in std_logic_vector(31 downto 0);-- input: data to register write
+			ADDR: in std_logic_vector(1 downto 0);--address offset of registers relative to peripheral base address
 			CLK: in std_logic;-- input
 			RST: in std_logic;-- input
 			WREN: in std_logic;-- input
@@ -100,6 +105,17 @@ architecture structure of i2s_master_transmitter is
 	);
 
 	end component;
+	
+	-----------signals for memory map interfacing----------------
+	constant ranges: boundaries := 	(--notation: base#value#
+												(16#00#,16#00#),--CR
+												(16#01#,16#01#),--DR
+												(16#02#,16#02#),--SR
+												(16#04#,16#07#) --interrupt controller
+												);
+	signal all_periphs_output: array32 (3 downto 0);
+	signal all_periphs_rden: std_logic_vector(3 downto 0);
+	signal all_periphs_wren: std_logic_vector(3 downto 0);
 	
 	constant N: natural := 4;--number of bits in each data written/read
 	signal words: std_logic_vector(1 downto 0);--00: 1 word; 01:2 words; 10: 3 words (unused); 11: 4 words
@@ -114,6 +130,7 @@ architecture structure of i2s_master_transmitter is
 	signal DR_out: std_logic_vector(31 downto 0);--data transmitted/received
 	signal DR_in:  std_logic_vector(31 downto 0);--data that will be written to DR
 	signal DR_wren:std_logic;--enables write value from D port
+	signal DR_rden:std_logic;-- not used, just to keep form
 	signal DR_ena:std_logic;--DR ENA (enables DR write)
 	
 	-- 8 stage fifos
@@ -134,16 +151,14 @@ architecture structure of i2s_master_transmitter is
 	signal CR_in: std_logic_vector(31 downto 0);--CR input
 	signal CR_Q: std_logic_vector(31 downto 0);--CR output
 	signal CR_wren:std_logic;
+	signal CR_rden:std_logic;
 	signal CR_ena:std_logic;
 		
 	signal SR_in: std_logic_vector(31 downto 0);--SR input
 	signal SR_Q: std_logic_vector(31 downto 0);--SR output
 	signal SR_wren:std_logic;
+	signal SR_rden:std_logic;
 	signal SR_ena:std_logic;
-	
-	signal all_registers_output: array32 (3 downto 0);
-	signal all_periphs_rden: std_logic_vector(3 downto 0);
-	signal address_decoder_wren: std_logic_vector(3 downto 0);
 begin
 	
 	i2s: i2s_master_transmitter_generic
@@ -165,11 +180,10 @@ begin
 	);
 	
 	--bit 0: BTF (sucessful transfer)
-	irq_ctrl_wren <= address_decoder_wren(2);
-	irq_ctrl_rden <= '1';--not necessary, just to keep form
 	irq_ctrl: interrupt_controller
 	generic map (L => 1)
 	port map(D => D,
+				ADDR => ADDR(1 downto 0),
 				CLK => CLK,
 				RST => RST,
 				WREN => irq_ctrl_wren,
@@ -184,7 +198,6 @@ begin
 	--data register: data to be transmited (goes to fifo, if fifo is full, discard older data and raises irq)
 	--each stage of fifo stores a 32 bit word,
 	--if word length (audio depth) is less than 32 bits, only LSB of a fifo stage is transmitted
-	DR_wren <= address_decoder_wren(1);
 	DR_ena <=	DR_wren;--DR_wren='1' indicates software write
 	DR_in <= D;-- write mode (master transmitter)
 	
@@ -234,7 +247,6 @@ begin
 	--bit 0: I2S_EN (write '1' to start, reset automatically)
 	CR_in <= D when CR_wren='1' else CR_Q(31 downto 1) & '0';
 	CR_ena <= '1';
-	CR_wren <= address_decoder_wren(0);
 	CR: d_flip_flop port map(D => CR_in,
 									RST=> RST,
 									CLK=> CLK,
@@ -252,7 +264,6 @@ begin
 	--bit 0: LFULL (left fifo is full)
 	SR_in <= (31 downto 7 => '0') & i2s_tx & right_overflow & left_overflow & right_empty & left_empty & right_full & left_full;
 	SR_ena <= '1';--always writes, updating status register
-	SR_wren <= address_decoder_wren(3);--not used, just to keep form
 	SR: d_flip_flop port map(D => SR_in,
 									RST=> RST,
 									CLK=> CLK,
@@ -261,18 +272,29 @@ begin
 									);
 
 -------------------------- address decoder ---------------------------------------------------
-	--addr 00: CR
-	--addr 01: DR
-	--addr 10: irq_ctrl (interrupts pending)
-	--addr 11: SR (status register: read-only)
-	all_registers_output <= (0=> CR_Q,1=> DR_out,2=> irq_ctrl_Q,3=> SR_Q);
-	decoder: address_decoder_register_map
-	generic map(N => 2)
-	port map(ADDR => ADDR,
-				RDEN => RDEN,
-				WREN => WREN,
-				data_in => all_registers_output,
-				WREN_OUT => address_decoder_wren,
-				data_out => Q
+	all_periphs_output	<= (3 => irq_ctrl_Q,	2 => SR_Q,	1 => DR_out,	0 => CR_Q);
+
+	irq_ctrl_rden	<= all_periphs_rden(3);-- not used, just to keep form
+	SR_rden			<= all_periphs_rden(2);-- not used, just to keep form
+	DR_rden			<= all_periphs_rden(1);-- not used, just to keep form
+	CR_rden			<= all_periphs_rden(0);-- not used, just to keep form
+
+	irq_ctrl_wren	<= all_periphs_wren(3);
+	SR_wren			<= all_periphs_wren(2);--not used, just to keep form
+	DR_wren			<= all_periphs_wren(1);
+	CR_wren			<= all_periphs_wren(0);
+	memory_map: address_decoder_memory_map
+	--N: word address width in bits
+	--B boundaries: list of values of the form (starting address,final address) of all peripherals, written as integers,
+	--list MUST BE "SORTED" (start address(i) < final address(i) < start address (i+1)),
+	--values OF THE FORM: "(b1 b2..bN 0..0),(b1 b2..bN 1..1)"
+	generic map (N => 3, B => ranges)
+	port map (	ADDR => ADDR,-- input, it is a word address
+			RDEN => RDEN,-- input
+			WREN => WREN,-- input
+			data_in => all_periphs_output,-- input: outputs of all peripheral
+			RDEN_OUT => all_periphs_rden,-- output
+			WREN_OUT => all_periphs_wren,-- output
+			data_out => Q-- data read
 	);
 end structure;

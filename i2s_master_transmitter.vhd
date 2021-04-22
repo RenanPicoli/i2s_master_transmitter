@@ -117,7 +117,7 @@ architecture structure of i2s_master_transmitter is
 	signal all_periphs_rden: std_logic_vector(3 downto 0);
 	signal all_periphs_wren: std_logic_vector(3 downto 0);
 	
-	constant N: natural := 4;--number of bits in each data written/read
+	constant N: natural := 16;--number of bits in each data written/read
 	signal words: std_logic_vector(1 downto 0);--00: 1 word; 01:2 words; 10: 3 words (unused); 11: 4 words
 	signal i2s_tx: std_logic;--flag indicating I2S is transmitting
 	signal all_i2s_irq: std_logic_vector(0 downto 0);--successfully transmitted all words

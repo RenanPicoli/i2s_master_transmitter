@@ -15,7 +15,7 @@ use ieee.std_logic_1164.all;--std_logic types, to_x01
 use ieee.numeric_std.all;--to_integer
 
 entity i2s_master_transmitter_generic is
-	generic (N: natural);--number of bits in each word
+	generic (FRS: natural);--FRS: frame size (bits or SCK cycles), FRS MUST BE EVEN
 	port (
 			DR_out: in std_logic_vector(31 downto 0);--data to be transmitted
 			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCK
@@ -23,6 +23,7 @@ entity i2s_master_transmitter_generic is
 			I2S_EN: in std_logic;--enables transfer to start
 			left_data: in std_logic_vector(31 downto 0);--left channel
 			right_data: in std_logic_vector(31 downto 0);--right channel
+			DS: in std_logic_vector(2 downto 0);--DS data size, (DS+1)*4 is the resolution (in bits) to use for each channel
 			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
 			IACK: in std_logic_vector(0 downto 0);--acknowledgement of interrupt request: successfully transmitted all words;
 			IRQ: out std_logic_vector(0 downto 0);--interrupt request: successfully transmitted all words;
@@ -44,8 +45,7 @@ architecture structure of i2s_master_transmitter_generic is
 	);
 	end component;
 	
-	signal fifo_sd_out: std_logic_vector(N-1 downto 0);--data to write on SD: one byte plus stop bit
-	signal fifo_SD_in: std_logic_vector(N-1 downto 0);-- data read from SD: one byte plus start and stop bits
+	signal fifo_sd_out: std_logic_vector((FRS/2)-1 downto 0);--data to write on SD: one channel word + padding bits
 	
 	--signals representing I2S transfer state
 	signal start: std_logic;-- indicates start bit being transmitted (also applies to repeated start)
@@ -54,7 +54,10 @@ architecture structure of i2s_master_transmitter_generic is
 	signal stop_stretched_2: std_logic;-- indicates stop bit being transmitted (useful to send last bit)
 	
 	--signals inherent to this implementation
-	signal parallel_data_in: std_logic_vector(N-1 downto 0);--data to write on SD: one word
+	type half_frame_array is array (natural range <>) of std_logic_vector((FRS/2)-1 downto 0);
+	signal parallel_data_in: std_logic_vector((FRS/2)-1 downto 0);--data to write on SD: one word
+	signal right_data_padded: half_frame_array (0 to 7);
+	signal left_data_padded: half_frame_array (0 to 7);
 	signal load: std_logic;--load shift register asynchronously
 	signal I2S_EN_delayed: std_logic;-- I2S_EN flag delayed one SCK clock cycle (for WS synchronizing)
 	signal WS_delayed: std_logic;
@@ -94,7 +97,7 @@ begin
 
 	---------------WS generation----------------------------
 	ws_gen: prescaler
-	generic map (factor => 2*N)
+	generic map (factor => FRS)
 	port map(CLK_IN	=> SCK_n,--because we need WS to change when SCK falls
 				RST		=> prescaler_rst,
 				CLK_OUT	=> prescaler_out
@@ -209,15 +212,21 @@ begin
 			if (stop_stretched_2='1') then
 				SD <= '0';
 			else
-				SD <= fifo_sd_out(N-1);--sends the MSbit of fifo_sd_out
+				SD <= fifo_sd_out((FRS/2)-1);--sends the MSbit of fifo_sd_out
 			end if;
 		end if;
 	end process;
 	
 	---------------parallel_data_in write------------------------
 	parallel_data_in <= (others=>'0') when (RST='1' or start='1') else
-								right_data(N-1 downto 0) when WS='1' else
-								left_data(N-1 downto 0);--when WS='0'
+								right_data_padded(to_integer(unsigned(DS))) when WS='1' else
+								left_data_padded(to_integer(unsigned(DS)));--when WS='0'
+
+	data_padded_i: for i in 0 to 7 generate
+		right_data_padded(i) <= right_data((i+1)*4-1 downto 0) & (32- (i+1)*4 -1 downto 0 => '0');
+		left_data_padded(i) <= left_data((i+1)*4-1 downto 0) & (32- (i+1)*4 -1 downto 0 => '0');
+	end generate;
+
 	
 	---------------fifo_sd_out write-----------------------------
 	fifo_w: process(RST,parallel_data_in,load,SCK,stop)
@@ -226,7 +235,7 @@ begin
 			fifo_sd_out <= parallel_data_in;
 		--updates fifo at falling edge of SCK so it can be read at rising_edge of SCK
 		elsif(falling_edge(SCK))then
-			fifo_sd_out <= fifo_sd_out(N-2 downto 0) & '0';--MSB is sent first
+			fifo_sd_out <= fifo_sd_out((FRS/2)-2 downto 0) & '0';--MSB is sent first
 		end if;
 	end process;
 	

@@ -22,9 +22,10 @@ entity i2s_master_transmitter is
 			IACK: in std_logic;--interrupt acknowledgement
 			Q: out std_logic_vector(31 downto 0);--for register read
 			IRQ: out std_logic;--interrupt request
+			SCK_IN: in std_logic;--clock for SCK generation (must be 256*fs, because SCK_IN is divided by 2 to generate SCK)
 			SD: out std_logic;--data line
 			WS: buffer std_logic;--left/right clock
-			SCK: out std_logic--continuous clock (bit clock)
+			SCK: out std_logic--continuous clock (bit clock); fSCK=128fs
 	);
 end i2s_master_transmitter;
 
@@ -56,32 +57,33 @@ architecture structure of i2s_master_transmitter is
 	end component;
 	
 	component i2s_master_transmitter_generic
-	generic (N: natural);--number of bits in each word
+	generic (FRS: natural);--FRS: frame size (bits or SCK cycles), FRS MUST BE EVEN
 	port (
 			DR_out: in std_logic_vector(31 downto 0);--data to be transmitted
-			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCL
+			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCK
 			RST: in std_logic;--reset
 			I2S_EN: in std_logic;--enables transfer to start
 			left_data: in std_logic_vector(31 downto 0);--left channel
 			right_data: in std_logic_vector(31 downto 0);--right channel
+			DS: in std_logic_vector(2 downto 0);--DS data size, (DS+1)*4 is the resolution (in bits) to use for each channel
 			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
 			IACK: in std_logic_vector(0 downto 0);--acknowledgement of interrupt request: successfully transmitted all words;
 			IRQ: out std_logic_vector(0 downto 0);--interrupt request: successfully transmitted all words;
 			pop: out std_logic;--requests another data to the fifo
 			TX: out std_logic;-- indicates transmission
-			SD: out std_logic;--data line
-			WS: out std_logic;--left/right clock (0 left, 1 right)
-			SCK: out std_logic--continuous clock (bit clock)
+			SD: buffer std_logic;--data line
+			WS: buffer std_logic;--left/right clock (0 left, 1 right)
+			SCK: buffer std_logic--continuous clock (bit clock)
 	);
 	end component;
 	
 	component smart_fifo
 	port (
 			DATA_IN: in std_logic_vector(31 downto 0);--for register write
-			CLK: in std_logic;
-			RST: in std_logic;
-			WREN: in std_logic;--enables software write
-			POP: in std_logic;--tells the fifo to move oldest data to position 0 if there is valid data
+			CLK: in std_logic;--processor clock for writes
+			RST: in std_logic;--asynchronous reset
+			WREN: in std_logic;--enables software write (SHOULD NOT be asserted during transmissions - pop='1'), if concurrent with pop, pop takes precedence
+			POP: in std_logic;--tells the fifo to shift data during transmission, if wren='1' and CLK='1' while pop='1', pop takes precedence
 			FULL: out std_logic;--'1' indicates that fifo is full
 			EMPTY: out std_logic;--'1' indicates that fifo is empty
 			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
@@ -117,7 +119,7 @@ architecture structure of i2s_master_transmitter is
 	signal all_periphs_rden: std_logic_vector(3 downto 0);
 	signal all_periphs_wren: std_logic_vector(3 downto 0);
 	
-	constant N: natural := 16;--number of bits in each data written/read
+	constant N: natural := 16;--resolution of each channel in bits
 	signal words: std_logic_vector(1 downto 0);--00: 1 word; 01:2 words; 10: 3 words (unused); 11: 4 words
 	signal i2s_tx: std_logic;--flag indicating I2S is transmitting
 	signal all_i2s_irq: std_logic_vector(0 downto 0);--successfully transmitted all words
@@ -162,13 +164,14 @@ architecture structure of i2s_master_transmitter is
 begin
 	
 	i2s: i2s_master_transmitter_generic
-	generic map (N => N)
+	generic map (FRS => 2*32)--FRS = 64 (32 bits for each channel)
 	port map(DR_out => DR_out,
 				CLK_IN => CLK,
 				RST => RST,
 				I2S_EN => CR_Q(0),
 				left_data => left_data,
 				right_data => right_data,
+				DS => CR_Q(6 downto 4),
 				NFR => CR_Q(3 downto 1),
 				IACK => all_i2s_iack,
 				IRQ => all_i2s_irq,
@@ -238,7 +241,7 @@ begin
 	
 	--control register:
 	--bit 7 LRFS: left-rifgt fifo select: 0 selects left fifo, 1 selects right fifo
-	--bits 6:4 DS data size, (DS+1)*4 is the word length to use for each channel (will be also half of a frame size).
+	--bits 6:4 DS: data size, (DS+1)*4 is the resolution (in bits) to use for each channel
 	--		Each fifo stage contains two of these words (one frame), right-aligned.
 	--		(000: 4 bit, 001: 8 bit, 010: 12 bit, 011: 16 bit, 100: 20 bit, 101: 24 bit, 110: 28 bit, 111: 32 bit)
 	--bits 3:1 NFR number of frames to transmit, if NFR=0, transmits forever;

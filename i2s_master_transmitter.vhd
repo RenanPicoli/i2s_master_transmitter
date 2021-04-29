@@ -166,7 +166,7 @@ begin
 	i2s: i2s_master_transmitter_generic
 	generic map (FRS => 2*32)--FRS = 64 (32 bits for each channel)
 	port map(DR_out => DR_out,
-				CLK_IN => CLK,
+				CLK_IN => SCK_IN,
 				RST => RST,
 				I2S_EN => CR_Q(0),
 				left_data => left_data,

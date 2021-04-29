@@ -13,13 +13,14 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_unsigned.all;
 
-use ieee.numeric_std.all;--to_integer
+use work.my_types.all;--array32
 
 ---------------------------------------------------
 
 entity interrupt_controller is
 generic	(L: natural);--L: number of IRQ lines
 port(	D: in std_logic_vector(31 downto 0);-- input: data to register write
+		ADDR: in std_logic_vector(1 downto 0);--address offset of registers relative to peripheral base address
 		CLK: in std_logic;-- input
 		RST: in std_logic;-- input
 		WREN: in std_logic;-- input
@@ -36,61 +37,101 @@ end interrupt_controller;
 ---------------------------------------------------
 
 architecture behv of interrupt_controller is
-
-	component d_flip_flop
-		port (D:	in std_logic_vector(31 downto 0);--only bit zeroed have effect, '1' is ignored
-				rst:	in std_logic;--synchronous reset
-				ENA:	in std_logic:='1';--enables writes
-				CLK:in std_logic;
-				Q:	out std_logic_vector(31 downto 0)  
-				);
+	component address_decoder_register_map
+	--N: address width in bits
+	--boundaries: upper limits of each end (except the last, which is 2**N-1)
+	generic	(N: natural);
+	port(	ADDR: in std_logic_vector(N-1 downto 0);-- input
+			RDEN: in std_logic;-- input
+			WREN: in std_logic;-- input
+			WREN_OUT: out std_logic_vector;-- output
+			data_in: in array32;-- input: outputs of all peripheral/registers
+			data_out: out std_logic_vector(31 downto 0)-- data read
+	);
 	end component;
-
-	signal IRQ_pend: 			std_logic_vector(31 downto 0);-- data to be written: from processor or IRQ lines
+	
+	signal irq_pend_Q: std_logic_vector(31 downto 0);
+	signal irq_pend_rden: std_logic;
+	signal irq_pend_wren: std_logic;-- not used, just to keep form
+		
+	signal iack_pend_Q: std_logic_vector(31 downto 0);
+	signal iack_pend_rden: std_logic;
+	signal iack_pend_wren: std_logic;-- not used, just to keep form
+		
+	signal iack_finished_Q: std_logic_vector(31 downto 0);
+	signal iack_finished_rden: std_logic;
+	signal iack_finished_wren: std_logic;-- not used, just to keep form
+	
+	signal all_registers_output: array32 (2 downto 0);
+	signal all_periphs_rden: std_logic_vector(2 downto 0);
+	signal address_decoder_wren: std_logic_vector(2 downto 0);
+	
+	------------signals for IRQ control-------------------	
 	signal IRQ_pend_out:		std_logic_vector(31 downto 0);-- status of all IRQs
-	signal previous_IRQ_pend:		std_logic_vector(31 downto 0);-- previous vlue of status of all IRQs
-	signal IRQ_IN_extended: std_logic_vector(31 downto 0);-- zero-extension of IRQ lines
+	signal IACK_pend_out:	std_logic_vector(31 downto 0);-- where the IACK must be sent when IACK_IN is asserted by processor
+	signal IACK_finished:	std_logic_vector(31 downto 0);	-- '1' when IACK_OUT is deasserted
 	signal irq:					std_logic;
-	signal tmp:					std_logic_vector(L-1 downto 0);
-	signal cleared: 			std_logic_vector(31 downto 0);-- '1' in positions where the pending bit went from '1' to '0'.
-	signal clr_rst:			std_logic := '0';
-	signal clr_set:			std_logic := '0';
+	signal tmp:					std_logic_vector(31 downto 0);
 
 begin
 	
 ---------------------------------- IRQ pending register ------------------------------------
-		-- status ('1' if pending) of all IRQ lines
-		irq_pending: d_flip_flop port map(	D => IRQ_pend,
-														RST=> RST,--resets all previous history of input signal
-														CLK=> CLK,--sampling clock
-														Q=> IRQ_pend_out
-														);
+		irq_pend_wren <= address_decoder_wren(0);
+		irq_pending_i: for i in 0 to L-1 generate
+			irq_pending: process(RST,irq_pend_wren,D,IRQ_pend_out,IRQ_IN)
+			begin
+				if(RST='1') then
+					IRQ_pend_out(i) <= '0';
+				elsif (irq_pend_wren='1') then --software writes '0' to clear pending bits, '1' is dont't care
+					IRQ_pend_out(i) <= IRQ_pend_out(i) and D(i);
+				elsif (rising_edge(IRQ_IN(i))) then -- IRQ assertion
+					IRQ_pend_out(i) <= '1';
+				end if;
+			end process;
+		end generate irq_pending_i;		
+		IRQ_pend_out(31 downto L) <= (others => '0');--unused bits receive '0'
+		irq_pend_Q <= IRQ_pend_out;--signal renaming
 		
-		IRQ_IN_extended <= (31 downto L => '0') & IRQ_IN;
-		-- based on IRQ lines and signal WREN, decides what to write in IRQ_pend, BEFORE irq_pend_out UPDATE
-		IRQ_pend_write: process(WREN, IRQ_IN_extended, D, CLK)
-		begin
-			if (WREN='1') then
-				IRQ_pend	<= D and IRQ_IN_extended;
-			else
-				IRQ_pend <= IRQ_IN_extended;
-			end if;
-		end process;
-		
-		cleared <= (not IRQ_pend_out) and previous_IRQ_pend;--identifica com '1' as posições que foram de '1' a '0'
-		
-		process (CLK)
-		begin
-			if (rising_edge(CLK)) then
-				previous_IRQ_pend <= IRQ_pend_out;
-			end if;
-		end process;
+---------------------------------- IACK pending register ------------------------------------
+		iack_pend_wren <= address_decoder_wren(1);
+		--detects where the IACK must be sent when IACK_IN is asserted by processor
+		iack_pending_i: for i in 0 to L-1 generate
+			iack_pending: process(RST,IACK_finished,IRQ_pend_out)
+			begin
+				if(RST='1') then
+					IACK_pend_out(i) <= '0';
+				elsif (IACK_finished(i)='1') then --software sends IACK
+					IACK_pend_out(i) <= '0';
+				elsif (falling_edge(IRQ_pend_out(i))) then -- IRQ assertion
+					IACK_pend_out(i) <= '1';
+				end if;
+			end process;
+		end generate iack_pending_i;
+		IACK_pend_out(31 downto L) <= (others => '0');--unused bits receive '0'
+		iack_pend_Q <= IACK_pend_out;--signal renaming
+
+---------------------------------- IACK finished register ------------------------------------
+		iack_finished_wren <= address_decoder_wren(2);
+		iack_finished_i: for i in 0 to L-1 generate
+			process (RST,IACK_OUT,IRQ_pend_out,CLK)
+			begin
+				if(RST='1') then
+					IACK_finished(i) <= '0';
+				elsif (IRQ_pend_out(i)='1') then
+					IACK_finished(i) <= '0';
+				elsif (falling_edge(IACK_OUT(i))) then-- asserts previous value
+					IACK_finished(i) <= '1';
+				end if;
+			end process;
+		end generate iack_finished_i;
+		IACK_finished(31 downto L) <= (others => '0');--unused bits receive '0'
+		iack_finished_Q <= IACK_finished;--signal renaming
 		
 		-- AFTER irq_pend_out UPDATE
 		--é necessário que o software zere os bits das IRQ atendidas e
 		--DEPOIS envie o IACK.
 		iack_out_write: for i in 0 to L-1 generate
-					IACK_OUT(i) <= IACK_IN and cleared(i);
+					IACK_OUT(i) <= IACK_IN and IACK_pend_out(i);
 		end generate;
 
 		-- AFTER irq_pend_out UPDATE
@@ -100,7 +141,21 @@ begin
 		end generate;		
 		irq <= tmp(L-1);
 		IRQ_OUT <= irq;
-		output <= IRQ_pend_out;
+		
+-------------------------- address decoder ---------------------------------------------------
+	--addr 00: irq_pend
+	--addr 01: iack_pend
+	--addr 10: iack_finished
+	all_registers_output <= (0=> irq_pend_Q,1=> iack_pend_Q,2=> iack_finished_Q);
+	decoder: address_decoder_register_map
+	generic map(N => 2)
+	port map(ADDR => ADDR,
+				RDEN => RDEN,
+				WREN => WREN,
+				data_in => all_registers_output,
+				WREN_OUT => address_decoder_wren,
+				data_out => output
+	);
 end behv;
 
 ---------------------------------------------------------------------------------------------

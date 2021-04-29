@@ -6,7 +6,10 @@ package my_types is
 	type array32 is array (integer range <>) of std_logic_vector (31 downto 0);
 	type array4 is array (integer range <>) of std_logic_vector (3 downto 0);
 	type array7 is array (integer range <>) of std_logic_vector (6 downto 0);
-	
+
+	type tuple is array (natural range <>) of integer;--meant to be a list of addresses
+	type boundaries is array (natural range <>) of tuple (0 to 1);--meant to be a list of pair (start:0, end:1)
+
 	type eflags is record
 	ZF			:std_logic;
 	reserved1:std_logic;

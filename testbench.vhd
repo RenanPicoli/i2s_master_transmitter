@@ -10,7 +10,7 @@ end testbench;
 
 architecture test of testbench is
 -- internal clock period.
-constant TIME_DELTA : time := 5 us;
+constant TIME_DELTA : time := 20 ns;
 
 --reset duration must be long enough to be perceived by the slowest clock (filter clock, both polarities)
 constant TIME_RST : time := 5 us;
@@ -31,10 +31,35 @@ constant TIME_RST : time := 5 us;
 --	);
 --end component;
 
+---------------------------------------------------
+--produces 12MHz from 50MHz
+component pll_12MHz
+	port
+	(
+		areset		: in std_logic  := '0';
+		inclk0		: in std_logic  := '0';
+		c0				: out std_logic 
+	);
+end component;
+
+---------------------------------------------------
+--produces fs and 256fs from 12MHz
+component pll_audio
+	port
+	(
+		areset		: in std_logic  := '0';
+		inclk0		: in std_logic  := '0';
+		c0				: out std_logic;
+		c1				: out std_logic
+	);
+end component;
+
+---------------------------------------------------
+
 --master signals
 signal D: std_logic_vector(31 downto 0);--for register write
 signal CLK: std_logic;--for register read/write, also used to generate SCL
-signal ADDR: std_logic_vector(1 downto 0);--address offset of registers relative to peripheral base address
+signal ADDR: std_logic_vector(2 downto 0);--address offset of registers relative to peripheral base address
 signal RST:	std_logic;--reset
 signal WREN: std_logic;--enables register write
 signal RDEN: std_logic;--enables register read
@@ -44,6 +69,13 @@ signal IRQ: std_logic;--interrupt request
 signal SD: std_logic;--data line
 signal WS: std_logic;--word select (left/right clock)
 signal SCK: std_logic;--bit clock
+signal SCK_IN: std_logic;--clock for SCK generation (must be 256*fs, because SCK_IN is divided by 2 to generate SCK)
+
+
+signal CLK22_05kHz: std_logic;-- 22.05kHz clock
+signal CLK5_647059MHz: std_logic;-- 5.647059MHz clock (for I2S peripheral)
+signal CLK12MHz: std_logic;-- 12MHz clock (MCLK for audio codec)
+signal ram_clk: std_logic;
 
 --slave signals
 --signal D_slv: std_logic_vector(31 downto 0);--for register write
@@ -51,10 +83,11 @@ signal SCK: std_logic;--bit clock
 --signal WREN_slv: std_logic;--enables register write
 
 begin
-	
+	SCK_IN <= CLK5_647059MHz;
+	ram_clk <= not CLK;
 	DUT: entity work.i2s_master_transmitter
 	port map(D 		=> D,
-				CLK	=> CLK,
+				CLK	=> ram_clk,
 				ADDR 	=> ADDR,
 				RST	=>	RST,
 				WREN	=> WREN,
@@ -64,6 +97,7 @@ begin
 				IRQ	=>	IRQ,
 				SD		=>	SD,
 				WS		=> WS,
+				SCK_IN	=> SCK_IN,
 				SCK	=>	SCK
 	);
 	
@@ -81,174 +115,97 @@ begin
 --				SCL	=>	SCL
 --	);
 	
-	clock: process--200kHz input clock (common to slave and master)
+	clock: process--50MHz input clock (common to slave and master)
 	begin
 		CLK <= '0';
-		wait for 2.5 us;
+		wait for 10 ns;
 		CLK <= '1';
-		wait for 2.5 us;
+		wait for 10 ns;
 	end process clock;
 	
 	--I2S registers configuration	
 	master_setup:process
 	begin
-		wait for TIME_RST;
-		
-		--writes to right fifo
-		--zeroes & LRFS & DS[2:0] & NFR[2:0] & I2S_EN
-		ADDR <= "00";--CR address
-		D <= (31 downto 8 =>'0') & '1' & "000" & "000" & '0';--I2S_EN: 0; NFR: 010 (2); DS: 000 (4)
-		WREN <= '1';
-		wait for TIME_RST + TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_000F";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_000E";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_000D";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_000C";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_000B";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_000A";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0009";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0008";
-		WREN <= '1';
-		wait for TIME_DELTA;
+		wait for TIME_RST+(TIME_DELTA/2);
 		
 		--writes to left fifo
 		--zeroes & LRFS & DS[2:0] & NFR[2:0] & I2S_EN
-		ADDR <= "00";--CR address
-		D <= (31 downto 8 =>'0') & '0' & "000" & "000" & '0';--I2S_EN: 0; NFR: 010 (2); DS: 000 (4)
+		ADDR <= "000";--CR address
+		D <= (31 downto 8 =>'0') & '0' & "011" & "010" & '0';--configura CR: seleciona left fifo, DS 16 bits, 2 frames, aguardando início
 		WREN <= '1';
 		wait for TIME_DELTA;
 		
 		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0001";
+		ADDR <= "001";--DR address	
+		D <= x"0000_0F0F";
 		WREN <= '1';
 		wait for TIME_DELTA;
 		
 		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0002";
+		ADDR <= "001";--DR address	
+		D <= x"0000_F0F0";
+		WREN <= '1';
+		wait for TIME_DELTA;
+
+		
+		--writes to right fifo
+		--zeroes & LRFS & DS[2:0] & NFR[2:0] & I2S_EN
+		ADDR <= "000";--CR address
+		D <= (31 downto 8 =>'0') & '1' & "011" & "010" & '0';--configura CR: seleciona right fifo, DS 16 bits, 2 frames, aguardando início
 		WREN <= '1';
 		wait for TIME_DELTA;
 		
 		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0003";
+		ADDR <= "001";--DR address	
+		D <= x"0000_0F0F";
 		WREN <= '1';
 		wait for TIME_DELTA;
 		
 		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0004";
+		ADDR <= "001";--DR address	
+		D <= x"0000_F0F0";
+		WREN <= '1';
+		wait for TIME_DELTA;
+
+		--zeroes & LRFS & DS[2:0] & NFR[2:0] & I2S_EN
+		ADDR <= "000";--CR address, will start transfer
+		D<=(31 downto 8 =>'0') & '1' & "011" & "010" & '1';--I2S_EN: 1; NFR: 100 (4); DS: 000 (4)
 		WREN <= '1';
 		wait for TIME_DELTA;
 		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0005";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0006";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0007";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0008";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
+--		--nop
+--		WREN <= '0';		
+--		wait for 7*TIME_DELTA;
+--		
+--		--bits 7:0 data to be transmitted (goes to fifo)
 --		ADDR <= "01";--DR address	
 --		D <= x"0000_0009";
 --		WREN <= '1';
 --		wait for TIME_DELTA;
-
-		--zeroes & LRFS & DS[2:0] & NFR[2:0] & I2S_EN
-		ADDR <= "00";--CR address, will start transfer
-		D<=(31 downto 8 =>'0') & '0' & "000" & "100" & '1';--I2S_EN: 1; NFR: 100 (4); DS: 000 (4)
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--nop
-		WREN <= '0';		
-		wait for 7*TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_0009";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--nop
-		WREN <= '0';		
-		wait for 3*TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_000A";
-		WREN <= '1';
-		wait for TIME_DELTA;
-		
-		--nop
-		WREN <= '0';		
-		wait for 1*TIME_DELTA;
-		
-		--bits 7:0 data to be transmitted (goes to fifo)
-		ADDR <= "01";--DR address	
-		D <= x"0000_000B";
-		WREN <= '1';
-		wait for TIME_DELTA;
+--		
+--		--nop
+--		WREN <= '0';		
+--		wait for 3*TIME_DELTA;
+--		
+--		--bits 7:0 data to be transmitted (goes to fifo)
+--		ADDR <= "01";--DR address	
+--		D <= x"0000_000A";
+--		WREN <= '1';
+--		wait for TIME_DELTA;
+--		
+--		--nop
+--		WREN <= '0';		
+--		wait for 1*TIME_DELTA;
+--		
+--		--bits 7:0 data to be transmitted (goes to fifo)
+--		ADDR <= "01";--DR address	
+--		D <= x"0000_000B";
+--		WREN <= '1';
+--		wait for TIME_DELTA;
 		
 		WREN <= '0';
 		wait for 125 us;
-		ADDR <= "10";-- irq controller address	
+		ADDR <= "100";-- irq controller address	
 		D <= x"0000_0000";--zeroes irq line 0
 		WREN <= '1';
 		wait for TIME_DELTA;
@@ -283,6 +240,23 @@ begin
 --	end process slave_setup;
 	
 	RST <= '1', '0' after TIME_RST;--reset common to slave and master
-	IACK <= '0', '1' after 300 us, '0' after 310 us;
+--	IACK <= '0', '1' after 300 us, '0' after 310 us;
+
+	--produces 12MHz (MCLK) from 50MHz input
+	clk_12MHz: pll_12MHz
+	port map (
+	inclk0 => CLK,
+	areset => rst,
+	c0 => CLK12MHz
+	);
+
+	--produces 22059Hz (fs) and 5.647059MHz (256fs for BCLK_IN) from 12MHz input
+	clk_fs_256fs: pll_audio
+	port map (
+	inclk0 => CLK12MHz,
+	areset => rst,
+	c0 => CLK22_05kHz,
+	c1 => CLK5_647059MHz
+	);
 	
 end architecture test;

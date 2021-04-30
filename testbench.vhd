@@ -49,8 +49,9 @@ component pll_audio
 	(
 		areset		: in std_logic  := '0';
 		inclk0		: in std_logic  := '0';
-		c0				: out std_logic;
-		c1				: out std_logic
+		c0		: out std_logic;
+		c1		: out std_logic;
+		locked		: out std_logic
 	);
 end component;
 
@@ -70,10 +71,11 @@ signal SD: std_logic;--data line
 signal WS: std_logic;--word select (left/right clock)
 signal SCK: std_logic;--bit clock
 signal SCK_IN: std_logic;--clock for SCK generation (must be 256*fs, because SCK_IN is divided by 2 to generate SCK)
+signal SCK_IN_PLL_LOCKED: std_logic;--'1' if PLL that provides SCK_IN is locked
 
 
 signal CLK22_05kHz: std_logic;-- 22.05kHz clock
-signal CLK5_647059MHz: std_logic;-- 5.647059MHz clock (for I2S peripheral)
+signal CLK2_8235295MHz: std_logic;-- 2.8235295MHz clock (for I2S peripheral)
 signal CLK12MHz: std_logic;-- 12MHz clock (MCLK for audio codec)
 signal ram_clk: std_logic;
 
@@ -83,7 +85,7 @@ signal ram_clk: std_logic;
 --signal WREN_slv: std_logic;--enables register write
 
 begin
-	SCK_IN <= CLK5_647059MHz;
+	SCK_IN <= CLK2_8235295MHz;
 	ram_clk <= not CLK;
 	DUT: entity work.i2s_master_transmitter
 	port map(D 		=> D,
@@ -98,6 +100,7 @@ begin
 				SD		=>	SD,
 				WS		=> WS,
 				SCK_IN	=> SCK_IN,
+				SCK_IN_PLL_LOCKED => SCK_IN_PLL_LOCKED,--'1' if PLL that provides SCK_IN is locked
 				SCK	=>	SCK
 	);
 	
@@ -166,6 +169,11 @@ begin
 		D <= x"0000_F0F0";
 		WREN <= '1';
 		wait for TIME_DELTA;
+
+		WREN <= '0';
+		--waits  until pll_audio locks
+		wait until rising_edge(SCK_IN_PLL_LOCKED);
+		wait until falling_edge(CLK);
 
 		--zeroes & LRFS & DS[2:0] & NFR[2:0] & I2S_EN
 		ADDR <= "000";--CR address, will start transfer
@@ -250,13 +258,14 @@ begin
 	c0 => CLK12MHz
 	);
 
-	--produces 22059Hz (fs) and 5.647059MHz (256fs for BCLK_IN) from 12MHz input
-	clk_fs_256fs: pll_audio
+	--produces 22059Hz (fs) and 2.8235295MHz (128fs for BCLK_IN) from 12MHz input
+	clk_fs_128fs: pll_audio
 	port map (
 	inclk0 => CLK12MHz,
 	areset => rst,
 	c0 => CLK22_05kHz,
-	c1 => CLK5_647059MHz
+	c1 => CLK2_8235295MHz,
+	locked => SCK_IN_PLL_LOCKED
 	);
 	
 end architecture test;

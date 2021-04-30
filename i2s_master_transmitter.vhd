@@ -22,7 +22,8 @@ entity i2s_master_transmitter is
 			IACK: in std_logic;--interrupt acknowledgement
 			Q: out std_logic_vector(31 downto 0);--for register read
 			IRQ: out std_logic;--interrupt request
-			SCK_IN: in std_logic;--clock for SCK generation (must be 256*fs, because SCK_IN is divided by 2 to generate SCK)
+			SCK_IN: in std_logic;--clock for SCK generation (must be 128*fs, because SCK_IN is divided by 2 to generate SCK)
+			SCK_IN_PLL_LOCKED: in std_logic;--'1' if PLL that provides SCK_IN is locked
 			SD: out std_logic;--data line
 			WS: buffer std_logic;--left/right clock
 			SCK: out std_logic--continuous clock (bit clock); fSCK=128fs
@@ -124,6 +125,7 @@ architecture structure of i2s_master_transmitter is
 	signal i2s_tx: std_logic;--flag indicating I2S is transmitting
 	signal all_i2s_irq: std_logic_vector(0 downto 0);--successfully transmitted all words
 	signal all_i2s_iack: std_logic_vector(0 downto 0);
+	signal i2s_rst: std_logic;--keeps I2S generic component at reset until PLL lockes and SCK_IN is stable
 	
 	signal irq_ctrl_Q: std_logic_vector(31 downto 0);
 	signal irq_ctrl_rden: std_logic;-- not used, just to keep form
@@ -163,11 +165,12 @@ architecture structure of i2s_master_transmitter is
 	signal SR_ena:std_logic;
 begin
 	
+	i2s_rst <= RST or (not SCK_IN_PLL_LOCKED);
 	i2s: i2s_master_transmitter_generic
 	generic map (FRS => 2*32)--FRS = 64 (32 bits for each channel)
 	port map(DR_out => DR_out,
 				CLK_IN => SCK_IN,
-				RST => RST,
+				RST => i2s_rst,
 				I2S_EN => CR_Q(0),
 				left_data => left_data,
 				right_data => right_data,

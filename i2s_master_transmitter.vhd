@@ -261,6 +261,7 @@ begin
 									);
 	
 	--status register (write-only):
+	--bit 7: LOCKED (pll of SCK_IN is locked)
 	--bit 6: TX (I2S is transmitting)
 	--bit 5: ROVF (right fifo is overflowing in this clock cycle)
 	--bit 4: LOVF (left fifo is overflowing in this clock cycle)
@@ -268,7 +269,8 @@ begin
 	--bit 2: LEMP (left fifo is empty)
 	--bit 1: RFULL (right fifo is full)
 	--bit 0: LFULL (left fifo is full)
-	SR_in <= (31 downto 7 => '0') & i2s_tx & right_overflow & left_overflow & right_empty & left_empty & right_full & left_full;
+	SR_in <= (31 downto 8 => '0') & SCK_IN_PLL_LOCKED & i2s_tx & right_overflow &
+				left_overflow & right_empty & left_empty & right_full & left_full;
 	SR_ena <= '1';--always writes, updating status register
 	SR: d_flip_flop port map(D => SR_in,
 									RST=> RST,

@@ -49,7 +49,9 @@ begin
 		elsif(rising_edge(internal_CLK)) then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
 			if (WREN='0' and POP='1') then
 				fifo <= x"0000_0000" & fifo(7 downto 1);--discards read data, puts invalid data
-				head <= head - 1;
+				if(head/="0000")then
+					head <= head - 1;
+				end if;
 			elsif (WREN='1' and CLK='1' and POP='0') then
 				if (head="1000") then--current head is an invalid position, shift data, discard oldest data
 					fifo <= DATA_IN & fifo(7 downto 1);

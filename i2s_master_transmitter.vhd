@@ -22,10 +22,10 @@ entity i2s_master_transmitter is
 			IACK: in std_logic;--interrupt acknowledgement
 			Q: out std_logic_vector(31 downto 0);--for register read
 			IRQ: out std_logic;--interrupt request
-			SCK_IN: in std_logic;--clock for SCK generation (must be 128*fs, because SCK_IN is divided by 2 to generate SCK)
+			SCK_IN: in std_logic;--clock for SCK generation (must be 256*fs, because SCK_IN is divided by 2 to generate SCK)
 			SCK_IN_PLL_LOCKED: in std_logic;--'1' if PLL that provides SCK_IN is locked
 			SD: out std_logic;--data line
-			WS: buffer std_logic;--left/right clock
+			WS: buffer std_logic;--left/right clock (0 left, 1 right)
 			SCK: out std_logic--continuous clock (bit clock); fSCK=128fs
 	);
 end i2s_master_transmitter;

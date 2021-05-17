@@ -79,11 +79,11 @@ begin
 	begin
 		if (RST ='1') then
 			start	<= '0';
-		elsif (CLK_IN='0') then
-			start	<= '0';
 		--falling_edge e rising_edge don't need to_x01 because it is already used inside these functions
-		elsif	(rising_edge(I2S_EN)) then
+		elsif	(I2S_EN='1') then
 			start <= '1';
+		elsif (falling_edge(CLK_IN)) then
+			start	<= '0';
 		end if;
 	end process;
 
@@ -162,7 +162,7 @@ begin
 		end if;
 	end process;
 	---------------load generation----------------------------
-	load <= WS xor WS_delayed;
+	load <= (WS xor WS_delayed) and (not stop);
 	
 	--load is asserted at falling edge of CLK in and deasserted before when it rises, can't be detected smart_fifo
 	process(RST,load,CLK_IN)

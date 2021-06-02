@@ -61,7 +61,7 @@ architecture structure of i2s_master_transmitter is
 	generic (FRS: natural);--FRS: frame size (bits or SCK cycles), FRS MUST BE EVEN
 	port (
 			DR_out: in std_logic_vector(31 downto 0);--data to be transmitted
-			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCK
+			CLK_IN: in std_logic;--clock input used to generate SCK, must be stable (PLL locked)
 			RST: in std_logic;--reset
 			I2S_EN: in std_logic;--enables transfer to start
 			left_data: in std_logic_vector(31 downto 0);--left channel
@@ -70,7 +70,7 @@ architecture structure of i2s_master_transmitter is
 			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
 			IACK: in std_logic_vector(0 downto 0);--acknowledgement of interrupt request: successfully transmitted all words;
 			IRQ: out std_logic_vector(0 downto 0);--interrupt request: successfully transmitted all words;
-			pop: out std_logic;--requests another data to the fifo
+			pop: out std_logic;--requests another data to the fifo, is asserted next falling_edge of SCK after WS changes
 			TX: out std_logic;-- indicates transmission
 			SD: buffer std_logic;--data line
 			WS: buffer std_logic;--left/right clock (0 left, 1 right)

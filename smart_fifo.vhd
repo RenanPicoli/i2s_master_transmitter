@@ -35,32 +35,34 @@ architecture structure of smart_fifo is
 --pop: tells the fifo that data at 0 was read and can be discarded
 signal head: std_logic_vector(3 downto 0);--points to the position where newest data should arrive, MSB is a overflow bit
 signal fifo: array32(7 downto 0);
-signal internal_CLK: std_logic;--internal_CLK: rising_edge causes shift or load
+--signal internal_CLK: std_logic;--internal_CLK: rising_edge causes shift or load
 
 begin
 
-	internal_CLK <= POP or (WREN and CLK);--WREN SHOULD NOT BE ASSERTED while POP is 1 'cause POP takes precedence
-	process(RST,DATA_IN,internal_CLK,CLK,POP,WREN)
+--	internal_CLK <= POP or (WREN and CLK);--WREN SHOULD NOT BE ASSERTED while POP is 1 'cause POP takes precedence
+	process(RST,DATA_IN,CLK,POP,WREN)
 	begin
 		if(RST='1')then
 			--reset fifo
 			fifo <= (others=>(others=>'0'));
 			head<="0000";
-		elsif(rising_edge(internal_CLK)) then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
+		elsif(rising_edge(CLK)) then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
 			if (WREN='0' and POP='1') then
 				fifo <= x"0000_0000" & fifo(7 downto 1);--discards read data, puts invalid data
 				if(head/="0000")then
 					head <= head - 1;
 				end if;
-			elsif (WREN='1' and CLK='1' and POP='0') then
+			elsif (WREN='1' and POP='0') then
 				if (head="1000") then--current head is an invalid position, shift data, discard oldest data
 					fifo <= DATA_IN & fifo(7 downto 1);
 				else--head is valid position
 					fifo(to_integer(unsigned(head))) <= DATA_IN;
 					head <= head + 1;
 				end if;
-			elsif (WREN='1' and CLK='1' and POP='1') then
-				fifo <= DATA_IN & fifo(7 downto 1);--discards read data and pushes in new data
+			elsif (WREN='1' and POP='1') then
+--				fifo <= DATA_IN & fifo(7 downto 1);--discards read data and pushes in new data
+				fifo <= x"0000_0000" & fifo(7 downto 1);--discards read data, puts invalid data
+				fifo(to_integer(unsigned(head))) <= DATA_IN;--intentional overwrite to push new data
 			end if;
 		end if;
 	end process;

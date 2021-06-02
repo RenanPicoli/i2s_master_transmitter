@@ -198,19 +198,19 @@ begin
 	end process;
 	
 	---------------SCK generation----------------------------
-	------CLK_IN must be stable (PLL locked)-----------------
-	process(start,stop_stretched_2,CLK_IN,RST)
+	------CLK must be stable (PLL locked)-----------------
+	process(start,stop_stretched_2,CLK,RST)
 	begin
 		if (RST ='1') then
 			sck_en	<= '0';
 		elsif	(start='1') then
 			sck_en <= '1';
-		elsif (falling_edge(stop_stretched_2)) then
+		elsif (falling_edge(CLK) and stop_stretched_2='0') then
 			sck_en	<= '0';
 		end if;
 	end process;
 	CLK <= CLK_IN;
-	SCK <= CLK when (sck_en = '1') else '1';
+	SCK <= CLK or (not sck_en);
 	SCK_n <= not SCK;
 
 	---------------SD write----------------------------

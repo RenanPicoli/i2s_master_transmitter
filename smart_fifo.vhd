@@ -67,15 +67,7 @@ begin
 	
 	DATA_OUT <= fifo(0);
 	FULL		<= head(3);
-	EMPTY		<= '1' when head="0000" else '0';
-	
-	process(RST,CLK,head,WREN,POP)
-	begin
-		if (RST='1') then
-			OVF <= '0';
-		elsif(falling_edge(CLK))then--updates OVF while the data is written in fifo
-			OVF	<= head(3) and WREN and (not POP);--FULL and WREN='1' and POP='0'
-		end if;
-	end process;
+	EMPTY		<= '1' when head="0000" else '0';	
+	OVF		<= head(3) and WREN and (not POP);--FULL and WREN='1' and POP='0'
 	
 end structure;

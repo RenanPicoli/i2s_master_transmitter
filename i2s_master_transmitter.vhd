@@ -60,8 +60,7 @@ architecture structure of i2s_master_transmitter is
 	component i2s_master_transmitter_generic
 	generic (FRS: natural);--FRS: frame size (bits or SCK cycles), FRS MUST BE EVEN
 	port (
-			DR_out: in std_logic_vector(31 downto 0);--data to be transmitted
-			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCK
+			CLK_IN: in std_logic;--clock input used to generate SCK, must be stable (PLL locked)
 			RST: in std_logic;--reset
 			I2S_EN: in std_logic;--enables transfer to start
 			left_data: in std_logic_vector(31 downto 0);--left channel
@@ -168,7 +167,7 @@ begin
 	i2s_rst <= RST or (not SCK_IN_PLL_LOCKED);
 	i2s: i2s_master_transmitter_generic
 	generic map (FRS => 2*32)--FRS = 64 (32 bits for each channel)
-	port map(DR_out => DR_out,
+	port map(
 				CLK_IN => SCK_IN,
 				RST => i2s_rst,
 				I2S_EN => CR_Q(0),
@@ -207,6 +206,7 @@ begin
 	DR_ena <=	DR_wren;--DR_wren='1' indicates software write
 	DR_in <= D;-- write mode (master transmitter)
 	
+	--DR stores the last data written, just for software query
 	DR: d_flip_flop port map(D => DR_in,
 									RST=> RST,--resets all previous history of input signal
 									CLK=> CLK,--sampling clock
@@ -214,11 +214,12 @@ begin
 									Q=> DR_out
 									);
 	
+	--DR and the fifos are mapped to the same address
 	--older data is available at position 0
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
 	left_pop <= pop and (not WS);
 	left_wren <= DR_wren and (not CR_Q(7));
-	l_fifo: smart_fifo port map(	DATA_IN => DR_out,
+	l_fifo: smart_fifo port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
 											RST => RST,
 											CLK => CLK,
 											WREN => left_wren,
@@ -232,7 +233,7 @@ begin
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
 	right_pop <= pop and WS;
 	right_wren <= DR_wren and (CR_Q(7));
-	r_fifo: smart_fifo port map(	DATA_IN => DR_out,
+	r_fifo: smart_fifo port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
 											RST => RST,
 											CLK => CLK,
 											WREN => right_wren,

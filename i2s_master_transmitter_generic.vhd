@@ -17,8 +17,7 @@ use ieee.numeric_std.all;--to_integer
 entity i2s_master_transmitter_generic is
 	generic (FRS: natural);--FRS: frame size (bits or SCK cycles), FRS MUST BE EVEN
 	port (
-			DR_out: in std_logic_vector(31 downto 0);--data to be transmitted
-			CLK_IN: in std_logic;--clock input, divided by 2 to generate SCK, must be stable (PLL locked)
+			CLK_IN: in std_logic;--clock input used to generate SCK, must be stable (PLL locked)
 			RST: in std_logic;--reset
 			I2S_EN: in std_logic;--enables transfer to start
 			left_data: in std_logic_vector(31 downto 0);--left channel
@@ -106,14 +105,7 @@ begin
 	prescaler_rst <= RST or I2S_EN_delayed;
 	
 	---------------WS generation----------------------------
-	process(RST,start,sck_en,prescaler_out)
-	begin
-		if(RST='1' or start='1') then
-			WS <='0';
-		else
-			WS <= sck_en and (not prescaler_out);
-		end if;
-	end process;
+	WS <= sck_en and (not prescaler_out);--WS is updated in SCK falling edge
 	
 	---------------WS_delayed generation---------------------
 	process(RST,SCK,WS,sck_en)
@@ -198,15 +190,17 @@ begin
 	end process;
 	
 	---------------SCK generation----------------------------
-	------CLK must be stable (PLL locked)-----------------
+	------CLK must be stable (PLL locked)--------------------
 	process(start,stop_stretched_2,CLK,RST)
 	begin
 		if (RST ='1') then
 			sck_en	<= '0';
-		elsif	(start='1') then
-			sck_en <= '1';
-		elsif (falling_edge(CLK) and stop_stretched_2='0') then
-			sck_en	<= '0';
+		elsif(falling_edge(CLK))then
+			if	(start='1') then
+				sck_en <= '1';
+			elsif (stop_stretched_2='0') then
+				sck_en	<= '0';
+			end if;
 		end if;
 	end process;
 	CLK <= CLK_IN;
@@ -240,13 +234,17 @@ begin
 
 	
 	---------------fifo_sd_out write-----------------------------
-	fifo_w: process(RST,parallel_data_in,load,SCK,stop)
+	fifo_w: process(RST,parallel_data_in,load_stretched,SCK,stop)
 	begin
-		if (RST='1' or load='1') then
-			fifo_sd_out <= parallel_data_in;
+		if (RST='1') then
+			fifo_sd_out <= (others=>'0');
 		--updates fifo at falling edge of SCK so it can be read at rising_edge of SCK
 		elsif(falling_edge(SCK))then
-			fifo_sd_out <= fifo_sd_out((FRS/2)-2 downto 0) & '0';--MSB is sent first
+			if(load_stretched='1') then
+				fifo_sd_out <= parallel_data_in;
+			else
+				fifo_sd_out <= fifo_sd_out((FRS/2)-2 downto 0) & '0';--MSB is sent first
+			end if;
 		end if;
 	end process;
 	

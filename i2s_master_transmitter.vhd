@@ -69,7 +69,7 @@ architecture structure of i2s_master_transmitter is
 			NFR: in std_logic_vector(2 downto 0);--controls number of frames to send (left channel	first, MSB first in each channel), 000 means unlimited
 			IACK: in std_logic_vector(0 downto 0);--acknowledgement of interrupt request: successfully transmitted all words;
 			IRQ: out std_logic_vector(0 downto 0);--interrupt request: successfully transmitted all words;
-			pop: out std_logic;--requests another data to the fifo
+			pop: out std_logic;--requests another data to the fifo, is asserted next falling_edge of SCK after WS changes
 			TX: out std_logic;-- indicates transmission
 			SD: buffer std_logic;--data line
 			WS: buffer std_logic;--left/right clock (0 left, 1 right)

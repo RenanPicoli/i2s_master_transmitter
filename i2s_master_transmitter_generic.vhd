@@ -70,6 +70,7 @@ architecture structure of i2s_master_transmitter_generic is
 	signal bits_sent: natural;--number of bits transmitted
 	signal frame_number: natural;--number of the frame (pairs left-right data) being transmitted
 	signal frame_number_delayed: natural;--needs a delay to be read after stop rising_edge
+	signal tx_bit_number: natural;--number of bits transmitted, updated after the bit is sent, at rising_edge of SCLK
 	
 	signal sck_en: std_logic;--enables SCK to follow CLK
 	
@@ -134,7 +135,7 @@ begin
 	
 	---------------stop flag generation----------------------------
 	-----------stop flag will be used to drive SD,SCK--------------
-	process(RST,SCK,I2S_EN_stretched,frame_number,NFR,WS,WS_delayed)
+	process(RST,SCK,I2S_EN_stretched,frame_number,NFR,WS,WS_delayed,CLK)
 	begin
 		if (RST ='1') then
 			stop	<= '0';
@@ -228,7 +229,7 @@ begin
 
 	---------------SD write----------------------------
 	--serial write on SD bus
-	serial_w: process(start,SCK,fifo_sd_out,RST,stop_stretched_2)
+	serial_w: process(start,SCK,fifo_sd_out,RST,stop)
 	begin
 		if (RST ='1' or start = '1' or stop='1') then
 			SD <= '0';
@@ -264,7 +265,7 @@ begin
 	end process;
 	
 	---------------frame_number write-----------------------------
-	frames_w: process(RST,WS,stop,FRS,tx_bit_number)
+	frames_w: process(RST,SCK,stop,tx_bit_number)
 	begin
 		if (RST ='1' or stop='1') then
 			frame_number <= 0;
@@ -297,7 +298,7 @@ begin
 	---------------IRQ BTF----------------------------
 	---------byte transfer finished-------------------
 	----transmitted all words successfully------------
-	process(RST,I2S_EN,IACK,frame_number_delayed,stop,NFR,CLK)
+	process(RST,I2S_EN,IACK,frame_number_delayed,stop,NFR,frame_number,CLK)
 	begin
 		if(RST='1') then
 			IRQ(0) <= '0';

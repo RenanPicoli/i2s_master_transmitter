@@ -69,7 +69,6 @@ architecture structure of i2s_master_transmitter_generic is
 	signal SCK_n: std_logic;-- not SCK
 	signal bits_sent: natural;--number of bits transmitted
 	signal frame_number: natural;--number of the frame (pairs left-right data) being transmitted
-	signal frame_number_delayed: natural;--needs a delay to be read after stop rising_edge
 	signal tx_bit_number: natural;--number of bits transmitted, updated after the bit is sent, at rising_edge of SCLK
 	
 	signal sck_en: std_logic;--enables SCK to follow CLK
@@ -147,30 +146,7 @@ begin
 			end if;
 		end if;
 	end process;
-		
---	---------------stop_stretched flag generation----------------------------
---	process(RST,CLK,stop)
---	begin
---		if (RST ='1') then
---			stop_stretched	<= '0';
---		elsif (stop='1') then
---			stop_stretched	<= '1';
---		elsif	(falling_edge(CLK)) then
---			stop_stretched <= '0';
---		end if;
---	end process;
---	
---	---------------stop_stretched_2 flag generation----------------------------
---	process(RST,CLK,stop_stretched)
---	begin
---		if (RST ='1') then
---			stop_stretched_2	<= '0';
---		elsif	(stop_stretched='0' and CLK='1') then
---			stop_stretched_2 <= '0';
---		elsif (rising_edge(stop_stretched)) then
---			stop_stretched_2	<= '1';
---		end if;
---	end process;
+
 	---------------load generation----------------------------
 	load <= (WS xor WS_delayed) and (not stop);
 	
@@ -284,15 +260,6 @@ begin
 			tx_bit_number <= tx_bit_number + 1;
 		end if;
 
-	end process;
-	
-	process(RST,frame_number,CLK)
-	begin
-		if (RST='1') then
-			frame_number_delayed <= 0;
-		elsif (rising_edge(CLK)) then--rising_edge because stop rises in the falling edge
-			frame_number_delayed <= frame_number;
-		end if;		
 	end process;
 	
 	---------------IRQ BTF----------------------------

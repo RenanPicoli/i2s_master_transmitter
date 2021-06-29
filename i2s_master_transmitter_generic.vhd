@@ -2,16 +2,13 @@
 --I2S master generic component
 --by Renan Picoli de Souza
 --sends data to SD bus and drives SCK clock and WS line
---supports only 8 bit sending/receiving
+--supports up to 32 bit sending/receiving
 --Generates IRQs in following events:
---received NACK
 --transmission ended (STOP)
---NO support for clock stretching
 --------------------------------------------------
 
 library ieee;
 use ieee.std_logic_1164.all;--std_logic types, to_x01
---use ieee.std_logic_unsigned.all;
 use ieee.numeric_std.all;--to_integer
 
 entity i2s_master_transmitter_generic is

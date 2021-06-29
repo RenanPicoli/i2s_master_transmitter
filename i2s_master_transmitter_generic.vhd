@@ -262,7 +262,7 @@ begin
 	---------------IRQ BTF----------------------------
 	---------byte transfer finished-------------------
 	----transmitted all words successfully------------
-	process(RST,I2S_EN,IACK,frame_number_delayed,stop,NFR,frame_number,CLK)
+	process(RST,I2S_EN,IACK,stop,NFR,frame_number,CLK)
 	begin
 		if(RST='1') then
 			IRQ(0) <= '0';

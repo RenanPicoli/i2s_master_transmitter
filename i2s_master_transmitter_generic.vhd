@@ -249,14 +249,18 @@ begin
 	end process;
 	
 	---------------tx_bit_number write-----------------------------
+	-----tx_bit_number write counts from 1 to FRS------------------
 	process(RST,SCK,stop,start)
 	begin
 		if (RST ='1' or start='1' or stop='1') then
 			tx_bit_number <= 0;
 		elsif(rising_edge(SCK))then
-			tx_bit_number <= tx_bit_number + 1;
+			if (tx_bit_number = FRS) then
+				tx_bit_number <= 1;
+			else
+				tx_bit_number <= tx_bit_number + 1;
+			end if;
 		end if;
-
 	end process;
 	
 	---------------IRQ BTF----------------------------

@@ -64,7 +64,6 @@ architecture structure of i2s_master_transmitter_generic is
 	signal CLK: std_logic;--used to generate SCK (when sck_en = '1')
 	
 	signal SCK_n: std_logic;-- not SCK
-	signal bits_sent: natural;--number of bits transmitted
 	signal frame_number: natural;--number of the frame (pairs left-right data) being transmitted
 	signal tx_bit_number: natural;--number of bits transmitted, updated after the bit is sent, at rising_edge of SCLK
 	

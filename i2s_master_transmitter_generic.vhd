@@ -271,7 +271,7 @@ begin
 			IRQ(0) <= '0';
 		elsif (IACK(0) ='1' or I2S_EN='1') then--if the processor decides not to acknowledge, clears the IRQ when new transmission starts
 			IRQ(0) <= '0';
-		elsif(falling_edge(CLK) and (frame_number=to_integer(unsigned(NFR)))) then--if NFR=000, stop never rises
+		elsif(falling_edge(CLK) and (frame_number=to_integer(unsigned(NFR)) and NFR/="000")) then--if NFR=000, stop never rises, IRQ is never asserted
 			IRQ(0) <= '1';
 		end if;
 	end process;

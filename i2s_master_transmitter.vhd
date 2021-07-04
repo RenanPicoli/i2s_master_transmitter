@@ -175,6 +175,9 @@ architecture structure of i2s_master_transmitter is
 	
 	--sync_chain outputs
 	signal CR_Q_sync: std_logic_vector(31 downto 0);--CR output synchronized to SCK_IN
+	signal left_data_sync: std_logic_vector(31 downto 0);
+	signal right_data_sync: std_logic_vector(31 downto 0);
+	signal all_i2s_iack_sync: std_logic_vector(0 downto 0);
 begin
 
 	sync_chain_CR: sync_chain
@@ -185,7 +188,34 @@ begin
 				CLK => SCK_IN,--clock of new clock domain
 				data_out => CR_Q_sync--data synchronized in CLK domain
 		);
-	
+
+	sync_chain_r_fifo: sync_chain
+		generic map (N => 32,--bus width in bits
+					L => 2)--number of registers in the chain
+		port map (
+				data_in => right_data,--data generated at another clock domain
+				CLK => SCK_IN,--clock of new clock domain
+				data_out => right_data_sync--data synchronized in CLK domain
+		);
+		
+	sync_chain_l_fifo: sync_chain
+		generic map (N => 32,--bus width in bits
+					L => 2)--number of registers in the chain
+		port map (
+				data_in => left_data,--data generated at another clock domain
+				CLK => SCK_IN,--clock of new clock domain
+				data_out => left_data_sync--data synchronized in CLK domain
+		);
+		
+	sync_chain_iack: sync_chain
+		generic map (N => 1,--bus width in bits
+					L => 2)--number of registers in the chain
+		port map (
+				data_in => all_i2s_iack,--data generated at another clock domain
+				CLK => SCK_IN,--clock of new clock domain
+				data_out => all_i2s_iack_sync--data synchronized in CLK domain
+		);
+		
 	i2s_rst <= RST or (not SCK_IN_PLL_LOCKED);
 	i2s: i2s_master_transmitter_generic
 	generic map (FRS => 2*32)--FRS = 64 (32 bits for each channel)
@@ -193,11 +223,11 @@ begin
 				CLK_IN => SCK_IN,
 				RST => i2s_rst,
 				I2S_EN => CR_Q_sync(0),
-				left_data => left_data,
-				right_data => right_data,
+				left_data => left_data_sync,
+				right_data => right_data_sync,
 				DS => CR_Q_sync(6 downto 4),
 				NFR => CR_Q_sync(3 downto 1),
-				IACK => all_i2s_iack,
+				IACK => all_i2s_iack_sync,
 				IRQ => all_i2s_irq,
 				pop => pop,
 				TX => i2s_tx,

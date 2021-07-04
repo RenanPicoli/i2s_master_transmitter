@@ -108,6 +108,16 @@ architecture structure of i2s_master_transmitter is
 
 	end component;
 	
+	component sync_chain
+		generic (N: natural;--bus width in bits
+					L: natural);--number of registers in the chain
+		port (
+				data_in: in std_logic_vector(N-1 downto 0);--data generated at another clock domain
+				CLK: in std_logic;--clock of new clock domain
+				data_out: out std_logic_vector(N-1 downto 0)--data synchronized in CLK domain
+		);
+	end component;
+	
 	-----------signals for memory map interfacing----------------
 	constant ranges: boundaries := 	(--notation: base#value#
 												(16#00#,16#00#),--CR
@@ -162,7 +172,19 @@ architecture structure of i2s_master_transmitter is
 	signal SR_wren:std_logic;
 	signal SR_rden:std_logic;
 	signal SR_ena:std_logic;
+	
+	--sync_chain outputs
+	signal CR_Q_sync: std_logic_vector(31 downto 0);--CR output synchronized to SCK_IN
 begin
+
+	sync_chain_CR: sync_chain
+		generic map (N => 32,--bus width in bits
+					L => 2)--number of registers in the chain
+		port map (
+				data_in => CR_Q,--data generated at another clock domain
+				CLK => SCK_IN,--clock of new clock domain
+				data_out => CR_Q_sync--data synchronized in CLK domain
+		);
 	
 	i2s_rst <= RST or (not SCK_IN_PLL_LOCKED);
 	i2s: i2s_master_transmitter_generic
@@ -170,11 +192,11 @@ begin
 	port map(
 				CLK_IN => SCK_IN,
 				RST => i2s_rst,
-				I2S_EN => CR_Q(0),
+				I2S_EN => CR_Q_sync(0),
 				left_data => left_data,
 				right_data => right_data,
-				DS => CR_Q(6 downto 4),
-				NFR => CR_Q(3 downto 1),
+				DS => CR_Q_sync(6 downto 4),
+				NFR => CR_Q_sync(3 downto 1),
 				IACK => all_i2s_iack,
 				IRQ => all_i2s_irq,
 				pop => pop,

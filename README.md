@@ -13,5 +13,14 @@ Note that this pointer should not be stored to a register (since we have two unr
 instead it must be implemented only with combinatorial circuit.
 if reset is high, head should be zeroed (head <= difference and (not rst))
 Note that the bus skew of the head is up to the sum of skews of each counter (they must be constrained)
+To prevent failures, both counters should be zeroed during the following events:
+* both at reset
+* both when their difference is zero
+Both counters and difference should be 32 bit wide, since its size determines the maximum f_fast/f_slow that can be accomodated
+
+
+Besides:
+* write counter should stop incrementing when the fifo overflows (more writes than readouts + fifo length, lost data can't be recovered)
+* read counter should stop incrementing when the fifo is emptied
 
 I2S (Inter_IC Sound) peripheral, works as a master transmitter. Testbench and slave receiver will be included.

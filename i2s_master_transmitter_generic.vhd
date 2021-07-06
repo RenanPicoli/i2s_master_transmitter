@@ -158,12 +158,12 @@ begin
 		end if;
 	end process;
 
-	process(RST,load_stretched,CLK_IN)
+	process(RST,load,CLK_IN)
 	begin
 		if (RST='1') then
 			pop <= '0';
 		elsif (falling_edge(CLK_IN)) then
-			pop <= load_stretched;
+			pop <= load;
 		end if;
 	end process;
 	

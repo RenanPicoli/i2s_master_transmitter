@@ -3,8 +3,7 @@
 --by Renan Picoli de Souza
 --8 stages fifo
 --32 bit data
---oldest data is always at 0 position
---newest data is above the position of the previous, like a stack
+--newest data is always at 0 position
 --TO-DO implement validity bit
 --TO-DO implement IRQ if tries to read from empty fifo
 --------------------------------------------------
@@ -18,12 +17,13 @@ use work.my_types.all;--array32
 entity smart_fifo is
 	port (
 			DATA_IN: in std_logic_vector(31 downto 0);--for register write
-			CLK: in std_logic;--processor clock for writes
+			WCLK: in std_logic;--processor clock for writes
+			RCLK: in std_logic;--processor clock for reading
 			RST: in std_logic;--asynchronous reset
-			WREN: in std_logic;--enables software write (SHOULD NOT be asserted during transmissions - pop='1'), if concurrent with pop, pop takes precedence
-			POP: in std_logic;--tells the fifo to shift data during transmission, if wren='1' and CLK='1' while pop='1', pop takes precedence
-			FULL: out std_logic;--'1' indicates that fifo is full
-			EMPTY: out std_logic;--'1' indicates that fifo is empty
+			WREN: in std_logic;--enables software write
+			POP: in std_logic;--aka RDEN
+			FULL: buffer std_logic;--'1' indicates that fifo is full
+			EMPTY: buffer std_logic;--'1' indicates that fifo is empty
 			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
 			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
 	);
@@ -31,45 +31,66 @@ end smart_fifo;
 
 
 architecture structure of smart_fifo is
---older data is available at position 0
---pop: tells the fifo that data at 0 was read and can be discarded
-signal head: std_logic_vector(3 downto 0);--points to the position where newest data should arrive, MSB is a overflow bit
-signal fifo: array32(7 downto 0);
---signal internal_CLK: std_logic;--internal_CLK: rising_edge causes shift or load
+--newest data is available at position 0
+--pop: tells the fifo that data at head was read and can be discarded
+signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit
+signal fifo: array32(0 to 7);
+signal difference: std_logic_vector(31 downto 0);-- writes - readings
+signal c_writes: std_logic_vector(31 downto 0);-- writes
+signal c_readings: std_logic_vector(31 downto 0);-- readings
 
 begin
 
---	internal_CLK <= POP or (WREN and CLK);--WREN SHOULD NOT BE ASSERTED while POP is 1 'cause POP takes precedence
-	process(RST,DATA_IN,CLK,POP,WREN)
+	--write counter
+	process(RST,WCLK,WREN,FULL)
+	begin
+		if(RST='1') then
+			c_writes <= (others=>'0');
+		elsif (rising_edge(WCLK) and WREN='1' and FULL='0') then		
+			c_writes <= c_writes + '1';
+		end if;
+	end process;
+	
+	--read counter
+	process(RST,RCLK,POP,EMPTY)
+	begin
+		if(RST='1') then
+			c_readings <= (others=>'0');
+		elsif (rising_edge(RCLK) and POP='1' and EMPTY='0') then		
+			c_readings <= c_readings + '1';
+		end if;
+	end process;
+	
+	difference <= c_writes - c_readings;
+	
+	--head(3) indicates overflow
+	head_i: for i in 0 to 3 generate
+		process(RST,difference)
+		begin
+			if (RST='1') then
+				head(i) <= '1';--if RST then (head = -1)
+			else
+				head(i) <= difference(i);
+			end if;
+		end process;
+	end generate head_i;
+	
+	--shift register writes
+	process(RST,DATA_IN,WCLK,POP,WREN)
 	begin
 		if(RST='1')then
 			--reset fifo
 			fifo <= (others=>(others=>'0'));
-			head<="0000";
-		elsif(rising_edge(CLK)) then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
-			if (WREN='0' and POP='1') then
-				fifo <= x"0000_0000" & fifo(7 downto 1);--discards read data, puts invalid data
-				if(head/="0000")then
-					head <= head - 1;
-				end if;
-			elsif (WREN='1' and POP='0') then
-				if (head="1000") then--current head is an invalid position, shift data, discard oldest data
-					fifo <= DATA_IN & fifo(7 downto 1);
-				else--head is valid position
-					fifo(to_integer(unsigned(head))) <= DATA_IN;
-					head <= head + 1;
-				end if;
-			elsif (WREN='1' and POP='1') then
---				fifo <= DATA_IN & fifo(7 downto 1);--discards read data and pushes in new data
-				fifo <= x"0000_0000" & fifo(7 downto 1);--discards read data, puts invalid data
-				fifo(to_integer(unsigned(head))) <= DATA_IN;--intentional overwrite to push new data
-			end if;
+		elsif(rising_edge(WCLK) and WREN='1') then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
+			fifo <= DATA_IN & fifo(0 to 6);
 		end if;
 	end process;
 	
-	DATA_OUT <= fifo(0);
+	--data_out assertion	
+	DATA_OUT <= fifo(to_integer(unsigned(head(2 downto 0))));
+	
 	FULL		<= head(3);
-	EMPTY		<= '1' when head="0000" else '0';	
+	EMPTY		<= '1' when (head="0000" and c_writes=x"00000000") else '0';	
 	OVF		<= head(3) and WREN and (not POP);--FULL and WREN='1' and POP='0'
 	
 end structure;

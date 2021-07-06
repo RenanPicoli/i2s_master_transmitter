@@ -80,12 +80,13 @@ architecture structure of i2s_master_transmitter is
 	component smart_fifo
 	port (
 			DATA_IN: in std_logic_vector(31 downto 0);--for register write
-			CLK: in std_logic;--processor clock for writes
+			WCLK: in std_logic;--processor clock for writes
+			RCLK: in std_logic;--processor clock for reading
 			RST: in std_logic;--asynchronous reset
-			WREN: in std_logic;--enables software write (SHOULD NOT be asserted during transmissions - pop='1'), if concurrent with pop, pop takes precedence
-			POP: in std_logic;--tells the fifo to shift data during transmission, if wren='1' and CLK='1' while pop='1', pop takes precedence
-			FULL: out std_logic;--'1' indicates that fifo is full
-			EMPTY: out std_logic;--'1' indicates that fifo is empty
+			WREN: in std_logic;--enables software write
+			POP: in std_logic;--aka RDEN
+			FULL: buffer std_logic;--'1' indicates that fifo is full
+			EMPTY: buffer std_logic;--'1' indicates that fifo is empty
 			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
 			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
 	);
@@ -273,7 +274,8 @@ begin
 	left_wren <= DR_wren and (not CR_Q(7));
 	l_fifo: smart_fifo port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
 											RST => RST,
-											CLK => CLK,
+											WCLK => CLK,
+											RCLK => SCK_IN,
 											WREN => left_wren,
 											POP => left_pop,
 											FULL => left_full,
@@ -287,7 +289,8 @@ begin
 	right_wren <= DR_wren and (CR_Q(7));
 	r_fifo: smart_fifo port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
 											RST => RST,
-											CLK => CLK,
+											WCLK => CLK,
+											RCLK => SCK_IN,
 											WREN => right_wren,
 											POP => right_pop,
 											FULL => right_full,

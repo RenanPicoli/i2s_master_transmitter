@@ -61,7 +61,7 @@ begin
 		end if;
 	end process;
 	
-	difference <= c_writes - c_readings;
+	difference <= c_writes - c_readings - 1;
 	
 	--head(3) indicates overflow
 	head_i: for i in 0 to 3 generate
@@ -89,7 +89,15 @@ begin
 	--data_out assertion	
 	DATA_OUT <= fifo(to_integer(unsigned(head(2 downto 0))));
 	
-	FULL		<= head(3);
+--	FULL		<= head(3) and (not RST);
+	process (RST,head)
+	begin
+		if(RST='1' or head="1111")then
+			FULL <= '0';
+		elsif (head(3)='1') then
+			FULL <= '1';
+		end if;
+	end process;
 	EMPTY		<= '1' when (head="0000" and c_writes=x"00000000") else '0';	
 	OVF		<= head(3) and WREN and (not POP);--FULL and WREN='1' and POP='0'
 	

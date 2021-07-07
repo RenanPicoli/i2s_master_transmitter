@@ -89,7 +89,6 @@ begin
 	--data_out assertion	
 	DATA_OUT <= fifo(to_integer(unsigned(head(2 downto 0))));
 	
---	FULL		<= head(3) and (not RST);
 	process (RST,head)
 	begin
 		if(RST='1' or head="1111")then
@@ -99,6 +98,6 @@ begin
 		end if;
 	end process;
 	EMPTY		<= '1' when (head="0000" and c_writes=x"00000000") else '0';	
-	OVF		<= head(3) and WREN and (not POP);--FULL and WREN='1' and POP='0'
+	OVF		<= '1' when (head(3)='1') and (head(2 downto 0)/="000") else '0';
 	
 end structure;

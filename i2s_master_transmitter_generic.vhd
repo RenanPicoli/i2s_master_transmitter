@@ -112,7 +112,8 @@ begin
 				RST		=> prescaler_rst,
 				CLK_OUT	=> prescaler_out
 	);
-	prescaler_rst <= RST or I2S_EN_delayed;
+--	prescaler_rst <= RST or I2S_EN_delayed;
+	prescaler_rst <= RST or stop;
 	
 	---------------WS generation----------------------------
 	WS <= sck_en and (not prescaler_out);--WS is updated in SCK falling edge

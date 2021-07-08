@@ -54,7 +54,7 @@ architecture structure of i2s_master_transmitter_generic is
 	signal parallel_data_in: std_logic_vector((FRS/2)-1 downto 0);--data to write on SD: one word
 	signal right_data_padded: half_frame_array (0 to 7);
 	signal left_data_padded: half_frame_array (0 to 7);
-	signal load: std_logic;--load shift register asynchronously
+	signal load: std_logic;--load shift register synchronously
 	signal load_stretched: std_logic;--load stretched, to generate pop
 	signal I2S_EN_delayed: std_logic;-- I2S_EN flag delayed one SCK clock cycle (for WS synchronizing)
 	signal I2S_EN_stretched: std_logic;-- I2S_EN flag stretched until first SCK falling_edge
@@ -159,11 +159,11 @@ begin
 		end if;
 	end process;
 
-	process(RST,load,CLK_IN)
+	process(RST,load,SCK)
 	begin
 		if (RST='1') then
 			pop <= '0';
-		elsif (falling_edge(CLK_IN)) then
+		elsif (rising_edge(SCK)) then
 			pop <= load;
 		end if;
 	end process;

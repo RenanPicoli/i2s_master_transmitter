@@ -190,23 +190,23 @@ begin
 				data_out => CR_Q_sync--data synchronized in CLK domain
 		);
 
-	sync_chain_r_fifo: sync_chain
-		generic map (N => 32,--bus width in bits
-					L => 2)--number of registers in the chain
-		port map (
-				data_in => right_data,--data generated at another clock domain
-				CLK => SCK_IN,--clock of new clock domain
-				data_out => right_data_sync--data synchronized in CLK domain
-		);
-		
-	sync_chain_l_fifo: sync_chain
-		generic map (N => 32,--bus width in bits
-					L => 2)--number of registers in the chain
-		port map (
-				data_in => left_data,--data generated at another clock domain
-				CLK => SCK_IN,--clock of new clock domain
-				data_out => left_data_sync--data synchronized in CLK domain
-		);
+--	sync_chain_r_fifo: sync_chain
+--		generic map (N => 32,--bus width in bits
+--					L => 2)--number of registers in the chain
+--		port map (
+--				data_in => right_data,--data generated at another clock domain
+--				CLK => SCK_IN,--clock of new clock domain
+--				data_out => right_data_sync--data synchronized in CLK domain
+--		);
+--		
+--	sync_chain_l_fifo: sync_chain
+--		generic map (N => 32,--bus width in bits
+--					L => 2)--number of registers in the chain
+--		port map (
+--				data_in => left_data,--data generated at another clock domain
+--				CLK => SCK_IN,--clock of new clock domain
+--				data_out => left_data_sync--data synchronized in CLK domain
+--		);
 		
 	sync_chain_iack: sync_chain
 		generic map (N => 1,--bus width in bits
@@ -224,8 +224,8 @@ begin
 				CLK_IN => SCK_IN,
 				RST => i2s_rst,
 				I2S_EN => CR_Q_sync(0),
-				left_data => left_data_sync,
-				right_data => right_data_sync,
+				left_data => left_data,
+				right_data => right_data,
 				DS => CR_Q_sync(6 downto 4),
 				NFR => CR_Q_sync(3 downto 1),
 				IACK => all_i2s_iack_sync,

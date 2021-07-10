@@ -230,7 +230,7 @@ begin
 		--updates fifo at falling edge of SCK so it can be read at rising_edge of SCK
 		elsif(falling_edge(SCK))then
 			if(start='1') then
-				fifo_sd_out <= parallel_data_in;
+				fifo_sd_out <= x"AAAA_BBBB";--parallel_data_in;
 			else
 				fifo_sd_out <= fifo_sd_out((FRS/2)-2 downto 0) & '0';--MSB is sent first
 			end if;

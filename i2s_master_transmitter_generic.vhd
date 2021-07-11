@@ -92,12 +92,12 @@ begin
 	end process;
 	
 	---------------start flag generation----------------------------
-	process(RST,I2S_EN_stretched,CLK)
+	process(RST,I2S_EN_stretched,CLK,TX)
 	begin
 		if (RST ='1') then
 			start	<= '0';
 		elsif (falling_edge(CLK)) then
-			if(I2S_EN_stretched='1') then
+			if(I2S_EN_stretched='1' and TX='0') then
 				start	<= '1';
 			else
 				start <= '0';
@@ -116,7 +116,7 @@ begin
 	prescaler_rst <= RST or stop;
 	
 	---------------WS generation----------------------------
-	WS <= sck_en and (not prescaler_out);--WS is updated in SCK falling edge
+	WS <= (not sck_en) or prescaler_out;--WS is updated in SCK falling edge
 	
 	---------------WS_delayed generation---------------------
 	-------------WS delayed half SCK cycle-------------------
@@ -134,7 +134,7 @@ begin
 	process(RST,SCK,I2S_EN_stretched,frame_number,NFR,WS,WS_delayed,CLK)
 	begin
 		if (RST ='1') then
-			stop	<= '0';
+			stop	<= '1';
 		elsif(falling_edge(CLK))then
 			if (I2S_EN_stretched='1') then
 				stop	<= '0';
@@ -184,9 +184,9 @@ begin
 	
 	---------------SCK generation----------------------------
 	------CLK must be stable (PLL locked)--------------------
-	process(I2S_EN_stretched,frame_number,NFR,CLK,RST)
+	process(I2S_EN_stretched,frame_number,NFR,CLK,RST,stop)
 	begin
-		if (RST ='1') then
+		if (RST ='1' or stop='1') then
 			sck_en	<= '0';
 		elsif(rising_edge(CLK))then
 			if	(I2S_EN_stretched='1') then
@@ -204,9 +204,9 @@ begin
 	--serial write on SD bus
 	serial_w: process(start,SCK,fifo_sd_out,RST,stop)
 	begin
-		if (RST ='1' or start = '1' or stop='1') then
+		if (RST ='1' or stop='1') then
 			SD <= '0';
-		else--TX='1', SD is driven using the fifo, which updates at falling_edge of SCK
+		elsif(falling_edge(SCK))then--TX='1', SD is driven using the fifo, which updates at falling_edge of SCK
 			SD <= fifo_sd_out((FRS/2)-1);--sends the MSbit of fifo_sd_out
 		end if;
 	end process;
@@ -223,16 +223,16 @@ begin
 
 	
 	---------------fifo_sd_out write-----------------------------
-	fifo_w: process(RST,parallel_data_in,SCK,start)
+	fifo_w: process(RST,parallel_data_in,SCK,start,TX,I2S_EN_stretched)
 	begin
 		if (RST='1') then
 			fifo_sd_out <= (others=>'0');
 		--updates fifo at falling edge of SCK so it can be read at rising_edge of SCK
 		elsif(falling_edge(SCK))then
-			if(start='1') then
-				fifo_sd_out <= x"AAAA_BBBB";--parallel_data_in;
-			else
+			if (TX='1') then
 				fifo_sd_out <= fifo_sd_out((FRS/2)-2 downto 0) & '0';--MSB is sent first
+			elsif (start='1') then
+				fifo_sd_out <= x"AAAA_BBBB";--parallel_data_in;
 			end if;
 		end if;
 	end process;

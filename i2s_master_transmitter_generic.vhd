@@ -123,8 +123,8 @@ begin
 	process(RST,SCK,WS,sck_en)
 	begin
 		if (RST ='1' or sck_en='0') then
-			WS_delayed	<= '0';
-		elsif	(rising_edge(SCK)) then
+			WS_delayed	<= '1';
+		elsif	(falling_edge(SCK)) then
 			WS_delayed <= WS;-- and sck_en prevents load after end of transmission (WS might have a falling edge)
 		end if;
 	end process;
@@ -206,13 +206,13 @@ begin
 	begin
 		if (RST ='1' or stop='1') then
 			SD <= '0';
-		elsif(falling_edge(SCK))then--TX='1', SD is driven using the fifo, which updates at falling_edge of SCK
+		else--if(falling_edge(SCK))then--TX='1', SD is driven using the fifo, which updates at falling_edge of SCK
 			SD <= fifo_sd_out((FRS/2)-1);--sends the MSbit of fifo_sd_out
 		end if;
 	end process;
 	
 	---------------parallel_data_in write------------------------
-	parallel_data_in <= (others=>'0') when (RST='1' or start='1') else
+	parallel_data_in <= --(others=>'0') when (RST='1' or start='1') else
 								right_data_padded(to_integer(unsigned(DS))) when WS='1' else
 								left_data_padded(to_integer(unsigned(DS)));--when WS='0'
 
@@ -223,7 +223,7 @@ begin
 
 	
 	---------------fifo_sd_out write-----------------------------
-	fifo_w: process(RST,parallel_data_in,SCK,start,TX,I2S_EN_stretched)
+	fifo_w: process(RST,parallel_data_in,SCK,load,TX,I2S_EN_stretched)
 	begin
 		if (RST='1') then
 			fifo_sd_out <= (others=>'0');
@@ -231,8 +231,8 @@ begin
 		elsif(falling_edge(SCK))then
 			if (TX='1') then
 				fifo_sd_out <= fifo_sd_out((FRS/2)-2 downto 0) & '0';--MSB is sent first
-			elsif (start='1') then
-				fifo_sd_out <= x"AAAA_BBBB";--parallel_data_in;
+			elsif (load='1') then
+				fifo_sd_out <= parallel_data_in;
 			end if;
 		end if;
 	end process;

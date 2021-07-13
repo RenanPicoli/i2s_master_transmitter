@@ -169,15 +169,15 @@ begin
 	end process;
 	
 	---------------TX flag generation----------------------------
-	process(RST,frame_number,NFR,CLK)
+	process(RST,frame_number,NFR,CLK,start)
 	begin
 		if (RST ='1') then
 			TX	<= '0';
 		elsif (falling_edge(CLK)) then
-			if (start='1') then
-				TX	<= '1';
-			elsif (frame_number=to_integer(unsigned(NFR)) and NFR/="000") then
+			if (frame_number=to_integer(unsigned(NFR)) and NFR/="000") then
 				TX <= '0';
+			elsif (start='1') then
+				TX	<= '1';
 			end if;
 		end if;
 	end process;
@@ -229,10 +229,10 @@ begin
 			fifo_sd_out <= (others=>'0');
 		--updates fifo at falling edge of SCK so it can be read at rising_edge of SCK
 		elsif(falling_edge(SCK))then
-			if (TX='1') then
-				fifo_sd_out <= fifo_sd_out((FRS/2)-2 downto 0) & '0';--MSB is sent first
-			elsif (load='1') then
+			if (load='1') then
 				fifo_sd_out <= parallel_data_in;
+			elsif (TX='1') then
+				fifo_sd_out <= fifo_sd_out((FRS/2)-2 downto 0) & '0';--MSB is sent first
 			end if;
 		end if;
 	end process;

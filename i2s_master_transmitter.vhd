@@ -179,6 +179,7 @@ architecture structure of i2s_master_transmitter is
 	signal left_data_sync: std_logic_vector(31 downto 0);
 	signal right_data_sync: std_logic_vector(31 downto 0);
 	signal all_i2s_iack_sync: std_logic_vector(0 downto 0);
+	signal all_i2s_irq_sync: std_logic_vector(0 downto 0);
 begin
 
 	sync_chain_CR: sync_chain
@@ -236,6 +237,18 @@ begin
 				SD => SD,
 				SCK => SCK
 	);
+
+	-- synchronizes IRQ to rising_edge of CLK, because:
+	--1: all_i2s_irq is generated at SCK_IN domain
+	--2: this signal is sampled in irq_ctrl at falling_edge of CLK
+	sync_chain_IRQ: sync_chain
+		generic map (N => 1,--bus width in bits
+					L => 2)--number of registers in the chain
+		port map (
+				data_in => all_i2s_irq,--data generated at another clock domain
+				CLK => CLK,--clock of new clock domain
+				data_out => all_i2s_irq_sync--data synchronized in CLK domain
+		);
 	
 	--bit 0: BTF (sucessful transfer)
 	irq_ctrl: interrupt_controller
@@ -246,7 +259,7 @@ begin
 				RST => RST,
 				WREN => irq_ctrl_wren,
 				RDEN => irq_ctrl_rden,
-				IRQ_IN => all_i2s_irq,
+				IRQ_IN => all_i2s_irq_sync,
 				IRQ_OUT => IRQ,
 				IACK_IN => IACK,
 				IACK_OUT => all_i2s_iack,

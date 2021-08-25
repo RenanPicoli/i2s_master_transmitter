@@ -115,6 +115,7 @@ architecture structure of i2s_master_transmitter is
 		port (
 				data_in: in std_logic_vector(N-1 downto 0);--data generated at another clock domain
 				CLK: in std_logic;--clock of new clock domain
+				RST: in std_logic;--asynchronous reset
 				data_out: out std_logic_vector(N-1 downto 0)--data synchronized in CLK domain
 		);
 	end component;
@@ -188,6 +189,7 @@ begin
 		port map (
 				data_in => CR_Q,--data generated at another clock domain
 				CLK => SCK_IN,--clock of new clock domain
+				RST => RST,--asynchronous reset
 				data_out => CR_Q_sync--data synchronized in CLK domain
 		);
 
@@ -197,6 +199,7 @@ begin
 --		port map (
 --				data_in => right_data,--data generated at another clock domain
 --				CLK => SCK_IN,--clock of new clock domain
+--				RST => RST,--asynchronous reset
 --				data_out => right_data_sync--data synchronized in CLK domain
 --		);
 --		
@@ -206,6 +209,7 @@ begin
 --		port map (
 --				data_in => left_data,--data generated at another clock domain
 --				CLK => SCK_IN,--clock of new clock domain
+--				RST => RST,--asynchronous reset
 --				data_out => left_data_sync--data synchronized in CLK domain
 --		);
 		
@@ -215,6 +219,7 @@ begin
 		port map (
 				data_in => all_i2s_iack,--data generated at another clock domain
 				CLK => SCK_IN,--clock of new clock domain
+				RST => RST,--asynchronous reset
 				data_out => all_i2s_iack_sync--data synchronized in CLK domain
 		);
 		
@@ -247,6 +252,7 @@ begin
 		port map (
 				data_in => all_i2s_irq,--data generated at another clock domain
 				CLK => CLK,--clock of new clock domain
+				RST => i2s_rst,--asynchronous reset
 				data_out => all_i2s_irq_sync--data synchronized in CLK domain
 		);
 	

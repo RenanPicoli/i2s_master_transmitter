@@ -180,6 +180,7 @@ architecture structure of i2s_master_transmitter is
 	signal left_data_sync: std_logic_vector(31 downto 0);
 	signal right_data_sync: std_logic_vector(31 downto 0);
 	signal all_i2s_iack_sync: std_logic_vector(0 downto 0);
+	signal all_i2s_iack_sync_n: std_logic_vector(0 downto 0);--inverted I2S IACK (sync)
 	signal all_i2s_irq_sync: std_logic_vector(0 downto 0);
 begin
 
@@ -213,15 +214,28 @@ begin
 --				data_out => left_data_sync--data synchronized in CLK domain
 --		);
 		
-	sync_chain_iack: sync_chain
+--	sync_chain_iack: sync_chain
+--		generic map (N => 1,--bus width in bits
+--					L => 2)--number of registers in the chain
+--		port map (
+--				data_in => all_i2s_iack,--data generated at another clock domain
+--				CLK => SCK_IN,--clock of new clock domain
+--				RST => RST,--asynchronous reset
+--				data_out => all_i2s_iack_sync--data synchronized in CLK domain
+--		);
+		--synchronized asynchronous reset (IACK)
+		--asserted asynchronously
+		--deasserted synchronously to the rising_edge of SCK_IN
+		sync_async_reset_iack: sync_chain
 		generic map (N => 1,--bus width in bits
 					L => 2)--number of registers in the chain
 		port map (
-				data_in => all_i2s_iack,--data generated at another clock domain
-				CLK => SCK_IN,--clock of new clock domain
-				RST => RST,--asynchronous reset
-				data_out => all_i2s_iack_sync--data synchronized in CLK domain
+				data_in(0) => '1',--data generated at another clock domain
+				CLK => SCK_IN,--clock of new clock domain				
+				RST => all_i2s_iack(0),--asynchronous ACTIVE reset
+				data_out => all_i2s_iack_sync_n --data synchronized in CLK domain
 		);
+		all_i2s_iack_sync <= not all_i2s_iack_sync_n;
 		
 	i2s_rst <= RST or (not SCK_IN_PLL_LOCKED);
 	i2s: i2s_master_transmitter_generic

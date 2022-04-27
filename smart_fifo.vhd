@@ -1,9 +1,10 @@
 --------------------------------------------------
---smart fifo component
+--dual clock fifo
 --by Renan Picoli de Souza
 --8 stages fifo
 --32 bit data
---newest data is always at 0 position
+--based on the code available at:
+-- https://www.ece.ucdavis.edu/~astill/dcfifo.html
 --TO-DO implement validity bit
 --TO-DO implement IRQ if tries to read from empty fifo
 --------------------------------------------------
@@ -31,13 +32,34 @@ end smart_fifo;
 
 
 architecture structure of smart_fifo is
---newest data is available at position 0
+
+	component sync_chain
+		generic (N: natural;--bus width in bits
+					L: natural);--number of registers in the chain
+		port (
+				data_in: in std_logic_vector(N-1 downto 0);--data generated at another clock domain
+				CLK: in std_logic;--clock of new clock domain
+				RST: in std_logic;--asynchronous reset
+				data_out: out std_logic_vector(N-1 downto 0)--data synchronized in CLK domain
+		);
+	end component;
+	
 --pop: tells the fifo that data at head was read and can be discarded
 signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit
 signal fifo: array32(0 to 7);
 signal difference: std_logic_vector(31 downto 0);-- writes - readings
-signal c_writes: std_logic_vector(31 downto 0);-- writes
-signal c_readings: std_logic_vector(31 downto 0);-- readings
+signal write_addr: std_logic_vector(31 downto 0);-- writes
+signal read_addr: std_logic_vector(31 downto 0);-- readings
+signal write_addr_gray: std_logic_vector(31 downto 0);-- write pointer gray coded
+signal read_addr_gray: std_logic_vector(31 downto 0);-- read pointer gray coded
+signal rd_write_addr: std_logic_vector(31 downto 0);-- write address synchronized to read clock domain
+signal wr_read_addr: std_logic_vector(31 downto 0);-- read address synchronized to write clock domain
+signal rd_write_addr_gray: std_logic_vector(31 downto 0);-- write address gray coded synchronized to read clock domain
+signal wr_read_addr_gray: std_logic_vector(31 downto 0);-- read address gray coded synchronized to write clock domain
+signal temp_adder_out: std_logic_vector(31 downto 0);--used to determine if fifo is full
+signal async_full: std_logic;
+
+constant reserve: std_logic_vector(31 downto 0) := (others=>'0');
 
 begin
 
@@ -45,9 +67,9 @@ begin
 	process(RST,WCLK,WREN,FULL)
 	begin
 		if(RST='1') then
-			c_writes <= (others=>'0');
+			write_addr <= (others=>'0');
 		elsif (rising_edge(WCLK) and WREN='1' and FULL='0') then		
-			c_writes <= c_writes + '1';
+			write_addr <= write_addr + '1';
 		end if;
 	end process;
 	
@@ -55,49 +77,110 @@ begin
 	process(RST,RCLK,POP,EMPTY)
 	begin
 		if(RST='1') then
-			c_readings <= (others=>'0');
+			read_addr <= (others=>'0');
 		elsif (rising_edge(RCLK) and POP='1' and EMPTY='0') then		
-			c_readings <= c_readings + '1';
+			read_addr <= read_addr + '1';
 		end if;
 	end process;
 	
-	difference <= c_writes - c_readings - 1;
+--	difference <= c_writes - c_readings - 1;
+	write_addr_gray <= write_addr xor std_logic_vector(unsigned(write_addr) sll 1);
+	read_addr_gray  <= read_addr xor std_logic_vector(unsigned(read_addr) sll 1);
+
+	-- converting from gray code to binary
+	wr_read_addr(31) <= wr_read_addr_gray(31);
+	wr_gray_to_bin: for i in 0 to 31-1 generate
+		wr_read_addr(i) <= wr_read_addr(i+1) xor wr_read_addr_gray(i);
+	end generate wr_gray_to_bin;
+
+	-- converting from gray code to binary
+	rd_write_addr(31) <= rd_write_addr_gray(31);
+	rd_gray_to_bin: for i in 0 to 31-1 generate
+		rd_write_addr(i) <= rd_write_addr(i+1) xor rd_write_addr_gray(i);
+	end generate rd_gray_to_bin;
+	
+	-- synchronizes write_addr to rising_edge of RCLK, because:
+	-- write_addr is generated at WCLK domain
+	sync_chain_wr_addr: sync_chain
+		generic map (N => 32,--bus width in bits
+					L => 2)--number of registers in the chain
+		port map (
+				data_in => write_addr_gray,--data generated at another clock domain
+				CLK => RCLK,--clock of new clock domain
+				RST => RST,--asynchronous reset
+				data_out => rd_write_addr_gray--data synchronized in CLK domain
+		);
+		
+	-- synchronizes read_addr to rising_edge of WCLK, because:
+	-- write_addr is generated at WCLK domain
+	sync_chain_rd_addr: sync_chain
+		generic map (N => 32,--bus width in bits
+					L => 2)--number of registers in the chain
+		port map (
+				data_in => read_addr_gray,--data generated at another clock domain
+				CLK => RCLK,--clock of new clock domain
+				RST => RST,--asynchronous reset
+				data_out => wr_read_addr_gray--data synchronized in CLK domain
+		);	
 	
 	--head(3) indicates overflow
-	head_i: for i in 0 to 3 generate
-		process(RST,difference)
-		begin
-			if (RST='1') then
-				head(i) <= '1';--if RST then (head = -1)
-			else
-				head(i) <= difference(i);
-			end if;
-		end process;
-	end generate head_i;
+--	process(RST,difference)
+--	begin
+--		if (RST='1') then
+--			head <= (others=>'1');--if RST then (head = -1)
+--		else
+--			head(i) <= difference;
+--		end if;
+--	end process;
 	
 	--shift register writes
+--	process(RST,DATA_IN,WCLK,POP,WREN)
+--	begin
+--		if(RST='1')then
+--			--reset fifo
+--			fifo <= (others=>(others=>'0'));
+--		elsif(rising_edge(WCLK) and WREN='1') then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
+--			fifo <= DATA_IN & fifo(0 to 6);
+--		end if;
+--	end process;
 	process(RST,DATA_IN,WCLK,POP,WREN)
 	begin
 		if(RST='1')then
 			--reset fifo
 			fifo <= (others=>(others=>'0'));
 		elsif(rising_edge(WCLK) and WREN='1') then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
-			fifo <= DATA_IN & fifo(0 to 6);
+			fifo(to_integer(unsigned(write_addr(2 downto 0)))) <= DATA_IN;
 		end if;
 	end process;
 	
 	--data_out assertion	
-	DATA_OUT <= fifo(to_integer(unsigned(head(2 downto 0))));
-	
-	process (RST,head)
+--	DATA_OUT <= fifo(to_integer(unsigned(head(2 downto 0))));
+	process(RST,RCLK,POP)
 	begin
-		if(RST='1' or head="1111")then
-			FULL <= '0';
-		elsif (head(3)='1') then
-			FULL <= '1';
+		if(RST='1') then
+			DATA_OUT <= (others => '0');
+		elsif (rising_edge(RCLK) and POP='1') then
+			DATA_OUT <= fifo(to_integer(unsigned(read_addr(2 downto 0))));
 		end if;
 	end process;
-	EMPTY		<= '1' when (head="0000" and c_writes=x"00000000") else '0';	
-	OVF		<= '1' when (head(3)='1') and (head(2 downto 0)/="000") else '0';
+	
+--	process (RST,head)
+--	begin
+--		if(RST='1' or head="1111")then
+--			FULL <= '0';
+--		elsif (head(3)='1') then
+--			FULL <= '1';
+--		end if;
+--	end process;
+
+   -- Reserve Logic Calculation, if the MSB is 1, hold.
+   -- Accordingly assign the wr request output and async full
+   temp_adder_out <= rd_write_addr - read_addr + reserve;
+   async_full <= temp_adder_out(31);
+	FULL <= async_full;
+	
+--	EMPTY		<= '1' when (head="0000" and c_writes=x"00000000") else '0';
+	EMPTY		<= '1' when (read_addr + 1 = rd_write_addr) else '0';
+--	OVF		<= '1' when (head(3)='1') and (head(2 downto 0)/="000") else '0';
 	
 end structure;

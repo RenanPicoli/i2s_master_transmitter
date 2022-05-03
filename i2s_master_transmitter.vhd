@@ -332,7 +332,7 @@ begin
 											DATA_OUT => right_data);
 	
 	--control register:
-	--bit 7 LRFS: left-rifgt fifo select: 0 selects left fifo, 1 selects right fifo
+	--bit 7 LRFS: select fifo for WRITE: 0 selects left fifo, 1 selects right fifo
 	--bits 6:4 DS: data size, (DS+1)*4 is the resolution (in bits) to use for each channel
 	--		Each fifo stage contains two of these words (one frame), right-aligned.
 	--		(000: 4 bit, 001: 8 bit, 010: 12 bit, 011: 16 bit, 100: 20 bit, 101: 24 bit, 110: 28 bit, 111: 32 bit)

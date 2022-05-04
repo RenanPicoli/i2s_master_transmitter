@@ -63,7 +63,7 @@ signal wr_read_addr_gray: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- read a
 signal temp_adder_out: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);--used to determine if fifo is full
 signal async_full: std_logic;
 
-constant reserve: std_logic_vector(31 downto 0) := (others=>'0');
+constant reserve: std_logic_vector(log2_FIFO_DEPTH-1 downto 0) := (others=>'0');
 
 begin
 

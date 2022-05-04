@@ -52,8 +52,8 @@ constant log2_FIFO_DEPTH: natural := natural(ceil(log2(real(FIFO_DEPTH))));--num
 --signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit
 signal fifo: array32(0 to FIFO_DEPTH-1);
 --signal difference: std_logic_vector(31 downto 0);-- writes - readings
-signal write_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- writes
-signal read_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- readings
+signal write_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- NEXT position to write on
+signal read_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- CURRENT position read
 signal write_addr_gray: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- write pointer gray coded
 signal read_addr_gray: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- read pointer gray coded
 signal rd_write_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- write address synchronized to read clock domain
@@ -67,7 +67,7 @@ constant reserve: std_logic_vector(log2_FIFO_DEPTH-1 downto 0) := (others=>'0');
 
 begin
 
-	--write counter
+	--write pointer
 	process(RST,WCLK,WREN,FULL)
 	begin
 		if(RST='1') then
@@ -77,11 +77,11 @@ begin
 		end if;
 	end process;
 	
-	--read counter
+	--read pointer
 	process(RST,RCLK,POP,EMPTY)
 	begin
 		if(RST='1') then
-			read_addr <= (others=>'0');
+			read_addr <= (others=>'1');--read_addr = -1, goes to 0 at first reading
 		elsif (rising_edge(RCLK) and POP='1' and EMPTY='0') then		
 			read_addr <= read_addr + '1';
 		end if;
@@ -159,14 +159,14 @@ begin
 	
 	--data_out assertion	
 --	DATA_OUT <= fifo(to_integer(unsigned(head(2 downto 0))));
-	process(RST,RCLK,POP)
-	begin
-		if(RST='1') then
-			DATA_OUT <= (others => '0');
-		elsif (rising_edge(RCLK) and POP='1') then
+--	process(RST,RCLK,POP)
+--	begin
+--		if(RST='1') then
+--			DATA_OUT <= (others => '0');
+--		elsif (rising_edge(RCLK) and POP='1') then
 			DATA_OUT <= fifo(to_integer(unsigned(read_addr)));
-		end if;
-	end process;
+--		end if;
+--	end process;
 	
 --	process (RST,head)
 --	begin
@@ -184,7 +184,7 @@ begin
 	FULL <= async_full;
 	
 --	EMPTY		<= '1' when (head="0000" and c_writes=x"00000000") else '0';
-	EMPTY		<= '1' when (read_addr + 1 = rd_write_addr) else '0';
+	EMPTY		<= '1' when (read_addr + 1 = rd_write_addr) else '0';--next position to read is the next to write (contains invalid data)
 --	OVF		<= '1' when (head(3)='1') and (head(2 downto 0)/="000") else '0';
 	
 end structure;

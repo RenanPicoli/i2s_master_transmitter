@@ -51,8 +51,8 @@ constant log2_FIFO_DEPTH: natural := natural(ceil(log2(real(FIFO_DEPTH))));--num
 --pop: tells the fifo that data at head was read and can be discarded
 --signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit
 signal fifo: array32(0 to FIFO_DEPTH-1);
-signal difference: std_logic_vector(31 downto 0);-- writes - readings
-signal write_addr: std_logic_vector(31 downto 0);-- writes
+--signal difference: std_logic_vector(31 downto 0);-- writes - readings
+signal write_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- writes
 signal read_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- readings
 signal write_addr_gray: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- write pointer gray coded
 signal read_addr_gray: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- read pointer gray coded

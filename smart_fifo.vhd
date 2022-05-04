@@ -14,6 +14,7 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_unsigned.all;--addition of std_logic_vector
 use ieee.numeric_std.all;--to_integer, unsigned
 use work.my_types.all;--array32
+use ieee.math_real.all;--ceil and log2
 
 entity smart_fifo is
 	port (
@@ -44,19 +45,22 @@ architecture structure of smart_fifo is
 		);
 	end component;
 	
+constant FIFO_DEPTH: natural := 8;--MUST BE A POWER OF 2;
+constant log2_FIFO_DEPTH: natural := natural(ceil(log2(real(FIFO_DEPTH))));--number of bits needed to select all fifo locations
+
 --pop: tells the fifo that data at head was read and can be discarded
-signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit
-signal fifo: array32(0 to 7);
+--signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit
+signal fifo: array32(0 to FIFO_DEPTH-1);
 signal difference: std_logic_vector(31 downto 0);-- writes - readings
 signal write_addr: std_logic_vector(31 downto 0);-- writes
-signal read_addr: std_logic_vector(31 downto 0);-- readings
-signal write_addr_gray: std_logic_vector(31 downto 0);-- write pointer gray coded
-signal read_addr_gray: std_logic_vector(31 downto 0);-- read pointer gray coded
-signal rd_write_addr: std_logic_vector(31 downto 0);-- write address synchronized to read clock domain
-signal wr_read_addr: std_logic_vector(31 downto 0);-- read address synchronized to write clock domain
-signal rd_write_addr_gray: std_logic_vector(31 downto 0);-- write address gray coded synchronized to read clock domain
-signal wr_read_addr_gray: std_logic_vector(31 downto 0);-- read address gray coded synchronized to write clock domain
-signal temp_adder_out: std_logic_vector(31 downto 0);--used to determine if fifo is full
+signal read_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- readings
+signal write_addr_gray: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- write pointer gray coded
+signal read_addr_gray: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- read pointer gray coded
+signal rd_write_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- write address synchronized to read clock domain
+signal wr_read_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- read address synchronized to write clock domain
+signal rd_write_addr_gray: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- write address gray coded synchronized to read clock domain
+signal wr_read_addr_gray: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- read address gray coded synchronized to write clock domain
+signal temp_adder_out: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);--used to determine if fifo is full
 signal async_full: std_logic;
 
 constant reserve: std_logic_vector(31 downto 0) := (others=>'0');
@@ -88,21 +92,21 @@ begin
 	read_addr_gray  <= read_addr xor std_logic_vector(unsigned(read_addr) sll 1);
 
 	-- converting from gray code to binary
-	wr_read_addr(31) <= wr_read_addr_gray(31);
-	wr_gray_to_bin: for i in 0 to 31-1 generate
+	wr_read_addr(log2_FIFO_DEPTH-1) <= wr_read_addr_gray(log2_FIFO_DEPTH-1);
+	wr_gray_to_bin: for i in 0 to log2_FIFO_DEPTH-2 generate
 		wr_read_addr(i) <= wr_read_addr(i+1) xor wr_read_addr_gray(i);
 	end generate wr_gray_to_bin;
 
 	-- converting from gray code to binary
-	rd_write_addr(31) <= rd_write_addr_gray(31);
-	rd_gray_to_bin: for i in 0 to 31-1 generate
+	rd_write_addr(log2_FIFO_DEPTH-1) <= rd_write_addr_gray(log2_FIFO_DEPTH-1);
+	rd_gray_to_bin: for i in 0 to log2_FIFO_DEPTH-2 generate
 		rd_write_addr(i) <= rd_write_addr(i+1) xor rd_write_addr_gray(i);
 	end generate rd_gray_to_bin;
 	
 	-- synchronizes write_addr to rising_edge of RCLK, because:
 	-- write_addr is generated at WCLK domain
 	sync_chain_wr_addr: sync_chain
-		generic map (N => 32,--bus width in bits
+		generic map (N => log2_FIFO_DEPTH,--bus width in bits
 					L => 2)--number of registers in the chain
 		port map (
 				data_in => write_addr_gray,--data generated at another clock domain
@@ -114,7 +118,7 @@ begin
 	-- synchronizes read_addr to rising_edge of WCLK, because:
 	-- write_addr is generated at WCLK domain
 	sync_chain_rd_addr: sync_chain
-		generic map (N => 32,--bus width in bits
+		generic map (N => log2_FIFO_DEPTH,--bus width in bits
 					L => 2)--number of registers in the chain
 		port map (
 				data_in => read_addr_gray,--data generated at another clock domain
@@ -149,7 +153,7 @@ begin
 			--reset fifo
 			fifo <= (others=>(others=>'0'));
 		elsif(rising_edge(WCLK) and WREN='1') then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
-			fifo(to_integer(unsigned(write_addr(2 downto 0)))) <= DATA_IN;
+			fifo(to_integer(unsigned(write_addr))) <= DATA_IN;
 		end if;
 	end process;
 	
@@ -160,7 +164,7 @@ begin
 		if(RST='1') then
 			DATA_OUT <= (others => '0');
 		elsif (rising_edge(RCLK) and POP='1') then
-			DATA_OUT <= fifo(to_integer(unsigned(read_addr(2 downto 0))));
+			DATA_OUT <= fifo(to_integer(unsigned(read_addr)));
 		end if;
 	end process;
 	
@@ -176,7 +180,7 @@ begin
    -- Reserve Logic Calculation, if the MSB is 1, hold.
    -- Accordingly assign the wr request output and async full
    temp_adder_out <= rd_write_addr - read_addr + reserve;
-   async_full <= temp_adder_out(31);
+   async_full <= temp_adder_out(log2_FIFO_DEPTH-1);
 	FULL <= async_full;
 	
 --	EMPTY		<= '1' when (head="0000" and c_writes=x"00000000") else '0';

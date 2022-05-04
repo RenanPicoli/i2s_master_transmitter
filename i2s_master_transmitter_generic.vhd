@@ -159,14 +159,14 @@ begin
 		end if;
 	end process;
 
-	process(RST,load,SCK)
-	begin
-		if (RST='1') then
-			pop <= '0';
-		elsif (rising_edge(SCK)) then
+--	process(RST,load,SCK)
+--	begin
+--		if (RST='1') then
+--			pop <= '0';
+--		elsif (rising_edge(SCK)) then
 			pop <= load;
-		end if;
-	end process;
+--		end if;
+--	end process;
 	
 	---------------TX flag generation----------------------------
 	process(RST,frame_number,NFR,CLK,start)

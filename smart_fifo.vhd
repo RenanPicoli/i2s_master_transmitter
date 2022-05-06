@@ -24,8 +24,8 @@ entity smart_fifo is
 			RST: in std_logic;--asynchronous reset
 			WREN: in std_logic;--enables software write
 			POP: in std_logic;--aka RDEN
-			FULL: buffer std_logic;--'1' indicates that fifo is full
-			EMPTY: buffer std_logic;--'1' indicates that fifo is empty
+			FULL: buffer std_logic;--'1' indicates that fifo is (almost) full
+			EMPTY: buffer std_logic;--'1' indicates that fifo is (almost) empty
 			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
 			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
 	);
@@ -72,7 +72,8 @@ begin
 	begin
 		if(RST='1') then
 			write_addr <= (others=>'0');
-		elsif (rising_edge(WCLK) and WREN='1' and FULL='0') then		
+			--SOFTWARE MUST CHECK the (almost) FULL flag before writing
+		elsif (rising_edge(WCLK) and WREN='1') then-- and FULL='0') then		
 			write_addr <= write_addr + '1';
 		end if;
 	end process;
@@ -82,7 +83,8 @@ begin
 	begin
 		if(RST='1') then
 			read_addr <= (others=>'1');--read_addr = -1, goes to 0 at first reading
-		elsif (rising_edge(RCLK) and POP='1' and EMPTY='0') then		
+			--SOFTWARE MUST CHECK the (almost) EMPTY flag before reading
+		elsif (rising_edge(RCLK) and POP='1') then-- and EMPTY='0') then		
 			read_addr <= read_addr + '1';
 		end if;
 	end process;

@@ -85,8 +85,8 @@ architecture structure of i2s_master_transmitter is
 			RST: in std_logic;--asynchronous reset
 			WREN: in std_logic;--enables software write
 			POP: in std_logic;--aka RDEN
-			FULL: buffer std_logic;--'1' indicates that fifo is full
-			EMPTY: buffer std_logic;--'1' indicates that fifo is empty
+			FULL: buffer std_logic;--'1' indicates that fifo is (almost) full
+			EMPTY: buffer std_logic;--'1' indicates that fifo is (almost) empty
 			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
 			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
 	);

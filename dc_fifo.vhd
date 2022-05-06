@@ -16,7 +16,8 @@ use ieee.numeric_std.all;--to_integer, unsigned
 use work.my_types.all;--array32
 use ieee.math_real.all;--ceil and log2
 
-entity smart_fifo is
+entity dc_fifo is
+	generic (REQUESTED_FIFO_DEPTH: natural);--does NOT need to be power of TWO
 	port (
 			DATA_IN: in std_logic_vector(31 downto 0);--for register write
 			WCLK: in std_logic;--processor clock for writes
@@ -29,10 +30,10 @@ entity smart_fifo is
 			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
 			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
 	);
-end smart_fifo;
+end dc_fifo;
 
 
-architecture structure of smart_fifo is
+architecture structure of dc_fifo is
 
 	component sync_chain
 		generic (N: natural;--bus width in bits
@@ -44,9 +45,9 @@ architecture structure of smart_fifo is
 				data_out: out std_logic_vector(N-1 downto 0)--data synchronized in CLK domain
 		);
 	end component;
-	
-constant FIFO_DEPTH: natural := 8;--MUST BE A POWER OF 2;
-constant log2_FIFO_DEPTH: natural := natural(ceil(log2(real(FIFO_DEPTH))));--number of bits needed to select all fifo locations
+
+constant log2_FIFO_DEPTH: natural := natural(ceil(log2(real(REQUESTED_FIFO_DEPTH))));--number of bits needed to select all fifo locations
+constant FIFO_DEPTH: natural := 2**log2_FIFO_DEPTH;--real fifo depth SHOULD BE A POWER OF 2 to prevent errors;
 
 --pop: tells the fifo that data at head was read and can be discarded
 --signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit

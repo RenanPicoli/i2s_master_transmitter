@@ -77,7 +77,8 @@ architecture structure of i2s_master_transmitter is
 	);
 	end component;
 	
-	component smart_fifo
+	component dc_fifo
+	generic (REQUESTED_FIFO_DEPTH: natural);--does NOT need to be power of TWO
 	port (
 			DATA_IN: in std_logic_vector(31 downto 0);--for register write
 			WCLK: in std_logic;--processor clock for writes
@@ -305,7 +306,8 @@ begin
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
 	left_pop <= pop and (not WS);
 	left_wren <= DR_wren and (not CR_Q(7));
-	l_fifo: smart_fifo port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
+	l_fifo: dc_fifo	generic map (REQUESTED_FIFO_DEPTH => 8)
+							port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
 											RST => RST,
 											WCLK => CLK,
 											RCLK => SCK_IN,
@@ -320,7 +322,8 @@ begin
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
 	right_pop <= pop and WS;
 	right_wren <= DR_wren and (CR_Q(7));
-	r_fifo: smart_fifo port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
+	r_fifo: dc_fifo	generic map (REQUESTED_FIFO_DEPTH => 4)
+							port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
 											RST => RST,
 											WCLK => CLK,
 											RCLK => SCK_IN,

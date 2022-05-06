@@ -188,7 +188,7 @@ begin
 	begin
 		if (RST ='1' or stop='1') then
 			sck_en	<= '0';
-		elsif(rising_edge(CLK))then
+		elsif(falling_edge(CLK))then
 			if	(I2S_EN_stretched='1') then
 				sck_en <= '1';
 			elsif (frame_number=to_integer(unsigned(NFR)) and NFR/="000") then

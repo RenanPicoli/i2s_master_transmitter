@@ -306,7 +306,7 @@ begin
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
 	left_pop <= pop and (not WS);
 	left_wren <= DR_wren and (not CR_Q(7));
-	l_fifo: dc_fifo	generic map (REQUESTED_FIFO_DEPTH => 8)
+	l_fifo: dc_fifo	generic map (REQUESTED_FIFO_DEPTH => 4)
 							port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
 											RST => RST,
 											WCLK => CLK,

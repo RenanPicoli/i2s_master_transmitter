@@ -149,7 +149,8 @@ architecture structure of i2s_master_transmitter is
 	signal DR_rden:std_logic;-- not used, just to keep form
 	signal DR_ena:std_logic;--DR ENA (enables DR write)
 	
-	-- 8 stage fifos
+	--fifos for right/left channels
+	--separate fifos allow stereo sound
 	signal left_data: std_logic_vector(31 downto 0);
 	signal left_pop: std_logic;--tells the (left) fifo to provide another data
 	signal left_wren: std_logic;--enables write on left fifo
@@ -320,19 +321,20 @@ begin
 	
 	--older data is available at position 0
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
-	right_pop <= pop and WS;
-	right_wren <= DR_wren and (CR_Q(7));
-	r_fifo: dc_fifo	generic map (REQUESTED_FIFO_DEPTH => 4)
-							port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
-											RST => RST,
-											WCLK => CLK,
-											RCLK => SCK_IN,
-											WREN => right_wren,
-											POP => right_pop,
-											FULL => right_full,
-											EMPTY => right_empty,
-											OVF => right_overflow,
-											DATA_OUT => right_data);
+--	right_pop <= pop and WS;
+--	right_wren <= DR_wren and (CR_Q(7));
+--	r_fifo: dc_fifo	generic map (REQUESTED_FIFO_DEPTH => 4)
+--							port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
+--											RST => RST,
+--											WCLK => CLK,
+--											RCLK => SCK_IN,
+--											WREN => right_wren,
+--											POP => right_pop,
+--											FULL => right_full,
+--											EMPTY => right_empty,
+--											OVF => right_overflow,
+--											DATA_OUT => right_data);
+	right_data <= left_data;--disables right fifo (which is being corrupted)
 	
 	--control register:
 	--bit 7 LRFS: select fifo for WRITE: 0 selects left fifo, 1 selects right fifo

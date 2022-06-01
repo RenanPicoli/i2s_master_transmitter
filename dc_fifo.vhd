@@ -13,7 +13,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_unsigned.all;--addition of std_logic_vector
 use ieee.numeric_std.all;--to_integer, unsigned
-use work.my_types.all;--array32
+use work.my_types.all;--array32, array_of_std_logic_vector
 use ieee.math_real.all;--ceil and log2
 
 entity dc_fifo is
@@ -45,13 +45,22 @@ architecture structure of dc_fifo is
 				data_out: out std_logic_vector(N-1 downto 0)--data synchronized in CLK domain
 		);
 	end component;
+	
+	--generic mux
+	component mux
+		generic(N_BITS_SEL: natural);--number of bits in sel port
+		port(	A: in array_of_std_logic_vector;--user must ensure correct sizes
+				sel: in std_logic_vector(N_BITS_SEL-1 downto 0);--user must ensure correct sizes
+				Q: out std_logic_vector--user must ensure correct sizes
+				);
+	end component;
 
 constant log2_FIFO_DEPTH: natural := natural(ceil(log2(real(REQUESTED_FIFO_DEPTH))));--number of bits needed to select all fifo locations
 constant FIFO_DEPTH: natural := 2**log2_FIFO_DEPTH;--real fifo depth SHOULD BE A POWER OF 2 to prevent errors;
 
 --pop: tells the fifo that data at head was read and can be discarded
 --signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit
-signal fifo: array32(0 to FIFO_DEPTH-1);
+signal fifo: array_of_std_logic_vector(0 to FIFO_DEPTH-1)(31 downto 0);
 --signal difference: std_logic_vector(31 downto 0);-- writes - readings
 signal write_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- NEXT position to write on
 signal read_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- CURRENT position read
@@ -167,9 +176,17 @@ begin
 --		if(RST='1') then
 --			DATA_OUT <= (others => '0');
 --		elsif (rising_edge(RCLK) and POP='1') then
-			DATA_OUT <= fifo(to_integer(unsigned(read_addr)));
+--			DATA_OUT <= fifo(to_integer(unsigned(read_addr)));
 --		end if;
 --	end process;
+
+	--DATA_OUT <= fifo(to_integer(unsigned(read_addr)));
+	--using theses muxes only to make a better view in RTL netlist viewer
+	data_out_mux: mux
+					generic map (N_BITS_SEL => log2_FIFO_DEPTH)
+					port map(A => fifo,
+								sel => read_addr,
+								Q => DATA_OUT);
 	
 --	process (RST,head)
 --	begin

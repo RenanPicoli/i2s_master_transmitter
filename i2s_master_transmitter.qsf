@@ -56,6 +56,7 @@ set_global_assignment -name VHDL_FILE prescaler.vhd
 set_global_assignment -name VHDL_FILE i2s_master_transmitter_generic.vhd
 set_global_assignment -name VHDL_FILE interrupt_controller.vhd
 set_global_assignment -name VHDL_FILE d_flip_flop.vhd
+set_global_assignment -name VHDL_FILE mux.vhd
 set_global_assignment -name VHDL_FILE address_decoder_register_map.vhd
 set_global_assignment -name VHDL_FILE i2s_master_transmitter.vhd
 set_global_assignment -name VHDL_FILE my_types.vhd

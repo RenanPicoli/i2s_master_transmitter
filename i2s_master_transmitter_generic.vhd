@@ -10,6 +10,7 @@
 library ieee;
 use ieee.std_logic_1164.all;--std_logic types, to_x01
 use ieee.numeric_std.all;--to_integer
+use work.my_types.all;--array_of_std_logic_vector
 
 entity i2s_master_transmitter_generic is
 	generic (FRS: natural);--FRS: frame size (bits or SCK cycles), FRS MUST BE EVEN
@@ -41,6 +42,15 @@ architecture structure of i2s_master_transmitter_generic is
 	);
 	end component;
 	
+	--generic mux
+	component mux
+		generic(N_BITS_SEL: natural);--number of bits in sel port
+		port(	A: in array_of_std_logic_vector;--user must ensure correct sizes
+				sel: in std_logic_vector(N_BITS_SEL-1 downto 0);--user must ensure correct sizes
+				Q: out std_logic_vector--user must ensure correct sizes
+				);
+	end component;
+	
 	signal fifo_sd_out: std_logic_vector((FRS/2)-1 downto 0);--data to write on SD: one channel word + padding bits
 	
 	--signals representing I2S transfer state
@@ -50,10 +60,14 @@ architecture structure of i2s_master_transmitter_generic is
 	signal stop_stretched_2: std_logic;-- indicates stop bit being transmitted (useful to send last bit)
 	
 	--signals inherent to this implementation
-	type half_frame_array is array (natural range <>) of std_logic_vector((FRS/2)-1 downto 0);
+	--type half_frame_array is array (natural range <>) of std_logic_vector((FRS/2)-1 downto 0);
 	signal parallel_data_in: std_logic_vector((FRS/2)-1 downto 0);--data to write on SD: one word
-	signal right_data_padded: half_frame_array (0 to 7);
-	signal left_data_padded: half_frame_array (0 to 7);
+	signal right_data_padded: array_of_std_logic_vector (0 to 7)((FRS/2)-1 downto 0);
+	signal left_data_padded: array_of_std_logic_vector (0 to 7)((FRS/2)-1 downto 0);
+--	signal all_right_data_padded: half_frame_array (0 to 7);
+--	signal all_left_data_padded: half_frame_array (0 to 7);
+	signal current_right_data_padded: std_logic_vector((FRS/2)-1 downto 0);
+	signal current_left_data_padded: std_logic_vector((FRS/2)-1 downto 0);
 	signal load: std_logic;--load shift register synchronously
 	signal load_stretched: std_logic;--load stretched, to generate pop
 	signal I2S_EN_delayed: std_logic;-- I2S_EN flag delayed one SCK clock cycle (for WS synchronizing)
@@ -212,9 +226,23 @@ begin
 	end process;
 	
 	---------------parallel_data_in write------------------------
-	parallel_data_in <= --(others=>'0') when (RST='1' or start='1') else
-								right_data_padded(to_integer(unsigned(DS))) when WS='1' else
-								left_data_padded(to_integer(unsigned(DS)));--when WS='0'
+--	parallel_data_in <= --(others=>'0') when (RST='1' or start='1') else
+--								right_data_padded(to_integer(unsigned(DS))) when WS='1' else
+--								left_data_padded(to_integer(unsigned(DS)));--when WS='0'
+	parallel_data_in <=	current_right_data_padded when WS='1' else
+								current_left_data_padded;--when WS='0'
+								
+	--using theses muxes only to make a better view in RTL netlist viewer
+	right_data_in_mux: mux
+							generic map (N_BITS_SEL => 3)
+							port map(A => right_data_padded,
+										sel => DS,
+										Q => current_right_data_padded);
+	left_data_in_mux: mux
+							generic map (N_BITS_SEL => 3)
+							port map(A => left_data_padded,
+										sel => DS,
+										Q => current_left_data_padded);
 
 	data_padded_i: for i in 0 to 7 generate
 		right_data_padded(i) <= right_data((i+1)*4-1 downto 0) & (32- (i+1)*4 -1 downto 0 => '0');

@@ -159,8 +159,12 @@ begin
 	end process;
 
 	---------------load generation----------------------------
-	load <= (WS xor WS_delayed) and (not stop);
-	
+	--load <= (WS xor WS_delayed) and (not stop);
+	--trying to avoid an undesired pop of I2S fifo during the last falling edge of WS
+	load <= '1' when (((WS='0' and WS_delayed='1') or (WS='1' and WS_delayed='0'))
+				and (not (tx_bit_number=FRS-1 and frame_number=to_integer(unsigned(NFR))-1 and NFR/="000")))
+				else '0';
+
 	--load is asserted at falling edge of CLK in and deasserted before when it rises, can't be detected smart_fifo
 	process(RST,load,CLK_IN)
 	begin

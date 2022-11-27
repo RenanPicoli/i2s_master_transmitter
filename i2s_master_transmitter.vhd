@@ -80,9 +80,9 @@ architecture structure of i2s_master_transmitter is
 	end component;
 	
 	component dc_fifo
-	generic (REQUESTED_FIFO_DEPTH: natural);--does NOT need to be power of TWO
+	generic (N: natural; REQUESTED_FIFO_DEPTH: natural);--REQUESTED_FIFO_DEPTH does NOT need to be power of TWO
 	port (
-			DATA_IN: in std_logic_vector(31 downto 0);--for register write
+			DATA_IN: in std_logic_vector(N-1 downto 0);--for register write
 			WCLK: in std_logic;--processor clock for writes
 			RCLK: in std_logic;--processor clock for reading
 			RST: in std_logic;--asynchronous reset
@@ -91,7 +91,7 @@ architecture structure of i2s_master_transmitter is
 			FULL: buffer std_logic;--'1' indicates that fifo is (almost) full
 			EMPTY: buffer std_logic;--'1' indicates that fifo is (almost) empty
 			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
-			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
+			DATA_OUT: out std_logic_vector(N-1 downto 0)--oldest data
 	);
 	end component;
 	
@@ -309,7 +309,7 @@ begin
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
 	left_pop <= pop and (not WS);
 	left_wren <= DR_wren and (not CR_Q(7));
-	l_fifo: dc_fifo	generic map (REQUESTED_FIFO_DEPTH => 4)
+	l_fifo: dc_fifo	generic map (N=> 32, REQUESTED_FIFO_DEPTH => 4)
 							port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
 											RST => RST,
 											WCLK => CLK,
@@ -325,7 +325,7 @@ begin
 	--pop: tells the fifo to move oldest data to position 0 if there is valid data
 --	right_pop <= pop and WS;
 --	right_wren <= DR_wren and (CR_Q(7));
---	r_fifo: dc_fifo	generic map (REQUESTED_FIFO_DEPTH => 4)
+--	r_fifo: dc_fifo	generic map (N=> 32, REQUESTED_FIFO_DEPTH => 4)
 --							port map(	DATA_IN => DR_in,--DR and the fifos are mapped to the same address
 --											RST => RST,
 --											WCLK => CLK,

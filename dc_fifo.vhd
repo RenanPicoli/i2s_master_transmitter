@@ -17,9 +17,9 @@ use work.my_types.all;--array32, array_of_std_logic_vector
 use ieee.math_real.all;--ceil and log2
 
 entity dc_fifo is
-	generic (REQUESTED_FIFO_DEPTH: natural);--does NOT need to be power of TWO
+	generic (N: natural; REQUESTED_FIFO_DEPTH: natural);--REQUESTED_FIFO_DEPTH does NOT need to be power of TWO
 	port (
-			DATA_IN: in std_logic_vector(31 downto 0);--for register write
+			DATA_IN: in std_logic_vector(N-1 downto 0);--for register write
 			WCLK: in std_logic;--processor clock for writes
 			RCLK: in std_logic;--processor clock for reading
 			RST: in std_logic;--asynchronous reset
@@ -28,7 +28,7 @@ entity dc_fifo is
 			FULL: buffer std_logic;--'1' indicates that fifo is (almost) full
 			EMPTY: buffer std_logic;--'1' indicates that fifo is (almost) empty
 			OVF: out std_logic;--'1' indicates that fifo is overflowing (and dropping data)
-			DATA_OUT: out std_logic_vector(31 downto 0)--oldest data
+			DATA_OUT: out std_logic_vector(N-1 downto 0)--oldest data
 	);
 end dc_fifo;
 
@@ -60,7 +60,7 @@ constant FIFO_DEPTH: natural := 2**log2_FIFO_DEPTH;--real fifo depth SHOULD BE A
 
 --pop: tells the fifo that data at head was read and can be discarded
 --signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit
-signal fifo: array_of_std_logic_vector(0 to FIFO_DEPTH-1)(31 downto 0);
+signal fifo: array_of_std_logic_vector(0 to FIFO_DEPTH-1)(N-1 downto 0);
 --signal difference: std_logic_vector(31 downto 0);-- writes - readings
 signal write_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- NEXT position to write on
 signal read_addr: std_logic_vector(log2_FIFO_DEPTH-1 downto 0);-- CURRENT position read

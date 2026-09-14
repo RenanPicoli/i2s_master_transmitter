@@ -17,7 +17,7 @@ use work.my_types.all;--array32, array_of_std_logic_vector
 use ieee.math_real.all;--ceil and log2
 
 entity dc_fifo is
-	generic (N: natural; REQUESTED_FIFO_DEPTH: natural);--REQUESTED_FIFO_DEPTH does NOT need to be power of TWO
+	generic (N: natural; REQUESTED_FIFO_DEPTH: natural; USE_RAM_BLOCKS: boolean := false; LEGACY_READ_POINTER: boolean := true; SAME_CLOCK: boolean := false);--REQUESTED_FIFO_DEPTH does NOT need to be power of TWO
 	port (
 			DATA_IN: in std_logic_vector(N-1 downto 0);--for register write
 			WCLK: in std_logic;--processor clock for writes
@@ -45,20 +45,13 @@ architecture structure of dc_fifo is
 				data_out: out std_logic_vector(N-1 downto 0)--data synchronized in CLK domain
 		);
 	end component;
-	
-	--generic mux
-	component mux
-		generic(N_BITS_SEL: natural);--number of bits in sel port
-		port(	A: in array_of_std_logic_vector;--user must ensure correct sizes
-				sel: in std_logic_vector(N_BITS_SEL-1 downto 0);--user must ensure correct sizes
-				Q: out std_logic_vector--user must ensure correct sizes
-				);
-	end component;
 
 constant log2_FIFO_DEPTH: natural := natural(ceil(log2(real(REQUESTED_FIFO_DEPTH))));--number of bits needed to select all fifo locations
 constant FIFO_DEPTH: natural := 2**log2_FIFO_DEPTH;--real fifo depth SHOULD BE A POWER OF 2 to prevent errors;
 
 --pop: tells the fifo that data at head was read and can be discarded
+-- One pointer is maintained in each clock domain. Gray-coded pointer values
+-- cross the clock boundary through two-stage synchronizers.
 --signal head: std_logic_vector(3 downto 0);--points to the position where oldest data should be read, MSB is a overflow bit
 --type fifo_word_t is std_logic_vector(N-1 downto 0);
 type fifo_t is array (natural range <>) of std_logic_vector(N-1 downto 0);
@@ -81,26 +74,49 @@ constant reserve: std_logic_vector(log2_FIFO_DEPTH-1 downto 0) := (others=>'0');
 begin
 
 	--write pointer
-	process(RST,WCLK,WREN,FULL)
+	process(RST,WCLK)
 	begin
 		if(RST='1') then
 			write_addr <= (others=>'0');
-			--SOFTWARE MUST CHECK the (almost) FULL flag before writing
-		elsif (rising_edge(WCLK) and WREN='1') then-- and FULL='0') then		
+		elsif rising_edge(WCLK) then
+			-- Do not overwrite unread data when the synchronized FIFO is full.
+			if WREN='1' and FULL='0' then
 			write_addr <= write_addr + '1';
+			end if;
 		end if;
 	end process;
 	
-	--read pointer
-	process(RST,RCLK,POP,EMPTY)
+	-- Mantém o comportamento histórico para os consumidores existentes.
+	legacy_read_pointer_proc: if LEGACY_READ_POINTER generate
+	process(RST,RCLK)
 	begin
 		if(RST='1') then
 			read_addr <= (others=>'1');--read_addr = -1, goes to 0 at first reading
-			--SOFTWARE MUST CHECK the (almost) EMPTY flag before reading
-		elsif (rising_edge(RCLK) and POP='1') then-- and EMPTY='0') then		
-			read_addr <= read_addr + '1';
+		elsif rising_edge(RCLK) then
+			-- Keep the legacy read convention: the first POP moves the pointer
+			-- from -1 to entry zero, making DATA_OUT valid after that update.
+			-- Do not advance the pointer when the FIFO is empty.
+			if POP='1' and EMPTY='0' then
+				read_addr <= read_addr + '1';
+			end if;
 		end if;
 	end process;
+	end generate legacy_read_pointer_proc;
+
+	-- O modo convencional aponta para a posição zero após o reset, permitindo
+	-- que DATA_OUT represente o primeiro item antes do primeiro POP.
+	standard_read_pointer_proc: if not LEGACY_READ_POINTER generate
+	process(RST,RCLK)
+	begin
+		if(RST='1') then
+			read_addr <= (others=>'0');
+		elsif rising_edge(RCLK) then
+			if POP='1' and EMPTY='0' then
+				read_addr <= read_addr + '1';
+			end if;
+		end if;
+	end process;
+	end generate standard_read_pointer_proc;
 	
 --	difference <= c_writes - c_readings - 1;
 	write_addr_gray <= write_addr xor std_logic_vector(unsigned(write_addr) srl 1);
@@ -120,6 +136,8 @@ begin
 	
 	-- synchronizes write_addr to rising_edge of RCLK, because:
 	-- write_addr is generated at WCLK domain
+	-- Em clocks diferentes, o ponteiro de escrita atravessa um sincronizador Gray.
+	different_clock_write_sync: if not SAME_CLOCK generate
 	sync_chain_wr_addr: sync_chain
 		generic map (N => log2_FIFO_DEPTH,--bus width in bits
 					L => 2)--number of registers in the chain
@@ -129,85 +147,91 @@ begin
 				RST => RST,--asynchronous reset
 				data_out => rd_write_addr_gray--data synchronized in CLK domain
 		);
+	end generate different_clock_write_sync;
+
+	-- Em clock único, a cópia direta elimina a latência artificial do CDC.
+	same_clock_write_sync: if SAME_CLOCK generate
+		rd_write_addr_gray <= write_addr_gray;
+	end generate same_clock_write_sync;
 		
-	-- synchronizes read_addr to rising_edge of WCLK, because:
-	-- write_addr is generated at WCLK domain
+	-- Synchronize the read pointer into the write domain. FULL is evaluated
+	-- with this synchronized value before accepting a new write.
+	-- Em clocks diferentes, o ponteiro de leitura também precisa ser sincronizado.
+	different_clock_read_sync: if not SAME_CLOCK generate
 	sync_chain_rd_addr: sync_chain
 		generic map (N => log2_FIFO_DEPTH,--bus width in bits
 					L => 2)--number of registers in the chain
 		port map (
 				data_in => read_addr_gray,--data generated at another clock domain
-				CLK => RCLK,--clock of new clock domain
+				CLK => WCLK,--clock of new clock domain
 				RST => RST,--asynchronous reset
 				data_out => wr_read_addr_gray--data synchronized in CLK domain
-		);	
+		);
+	end generate different_clock_read_sync;
+
+	-- Em clock único, o ponteiro de leitura já está no mesmo domínio.
+	same_clock_read_sync: if SAME_CLOCK generate
+		wr_read_addr_gray <= read_addr_gray;
+	end generate same_clock_read_sync;
 	
-	--head(3) indicates overflow
---	process(RST,difference)
---	begin
---		if (RST='1') then
---			head <= (others=>'1');--if RST then (head = -1)
---		else
---			head(i) <= difference;
---		end if;
---	end process;
-	
-	--shift register writes
---	process(RST,DATA_IN,WCLK,POP,WREN)
---	begin
---		if(RST='1')then
---			--reset fifo
---			fifo <= (others=>(others=>'0'));
---		elsif(rising_edge(WCLK) and WREN='1') then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
---			fifo <= DATA_IN & fifo(0 to 6);
---		end if;
---	end process;
-	process(RST,DATA_IN,WCLK,POP,WREN)
+	process(RST,DATA_IN,WCLK)
 	begin
 		if(RST='1')then
 			--reset fifo
 			fifo <= (others=>(others=>'0'));
-		elsif(rising_edge(WCLK) and WREN='1') then--rising edge to detect pop assertion (command to shift data) or WREN (async load)
-			fifo(to_integer(unsigned(write_addr))) <= DATA_IN;
+		elsif rising_edge(WCLK) then
+			-- Store data only for an accepted write; a full FIFO drops the
+			-- attempted write and reports it through OVF below.
+			if WREN='1' and FULL='0' then
+				fifo(to_integer(unsigned(write_addr))) <= DATA_IN;
+			end if;
 		end if;
 	end process;
 	
-	--data_out assertion	
---	DATA_OUT <= fifo(to_integer(unsigned(head(2 downto 0))));
---	process(RST,RCLK,POP)
---	begin
---		if(RST='1') then
---			DATA_OUT <= (others => '0');
---		elsif (rising_edge(RCLK) and POP='1') then
---			DATA_OUT <= fifo(to_integer(unsigned(read_addr)));
---		end if;
---	end process;
+	--DATA_OUT assertion
+	ram_blk_data_out: if USE_RAM_BLOCKS generate
+		-- fifo is synthesized as ram blocks, so readings must be synchronous.
+		process(RST,RCLK,POP)
+		begin
+			if (rising_edge(RCLK) and POP='1') then
+				DATA_OUT <= fifo(to_integer(unsigned(read_addr)));
+			end if;
+		end process;
+	end generate ram_blk_data_out;
 
-	DATA_OUT <= fifo(to_integer(unsigned(read_addr)));
-	--using theses muxes only to make a better view in RTL netlist viewer
---	data_out_mux: mux
---					generic map (N_BITS_SEL => log2_FIFO_DEPTH)
---					port map(A => fifo,
---								sel => read_addr,
---								Q => DATA_OUT);
+	async_data_out: if not USE_RAM_BLOCKS generate
+		-- DATA_OUT is an asynchronous reading logic.
+		-- fifo is synthesized as a register array, so it is possible to read any entry at any time.
+		-- With the legacy pointer convention it points
+		-- at the selected entry after the first accepted POP.
+		DATA_OUT <= fifo(to_integer(unsigned(read_addr)));
+	end generate async_data_out;
 	
---	process (RST,head)
---	begin
---		if(RST='1' or head="1111")then
---			FULL <= '0';
---		elsif (head(3)='1') then
---			FULL <= '1';
---		end if;
---	end process;
-
-   -- Reserve Logic Calculation, if the MSB is 1, hold.
-   -- Accordingly assign the wr request output and async full
+	-- FULL uses the synchronized read pointer. EMPTY intentionally retains
+	-- the legacy read_addr + 1 convention used by existing consumers.
    temp_adder_out <= rd_write_addr - read_addr + reserve;
    async_full <= temp_adder_out(log2_FIFO_DEPTH-1);
 	FULL <= async_full;
 	
 --	EMPTY		<= '1' when (head="0000" and c_writes=x"00000000") else '0';
-	EMPTY		<= '1' when (read_addr + 1 = rd_write_addr) else '0';--next position to read is the next to write (contains invalid data)
+	legacy_empty: if LEGACY_READ_POINTER generate
+		EMPTY <= '1' when (read_addr + 1 = rd_write_addr) else '0';--next position to read is the next to write (contains invalid data)
+	end generate legacy_empty;
+
+	-- A condição EMPTY convencional compara diretamente os ponteiros válidos.
+	standard_empty: if not LEGACY_READ_POINTER generate
+		EMPTY <= '1' when (read_addr = rd_write_addr) else '0';
+	end generate standard_empty;
 --	OVF		<= '1' when (head(3)='1') and (head(2 downto 0)/="000") else '0';
+
+	process(RST, WCLK)
+	begin
+		if RST='1' then
+			OVF <= '0';
+		elsif rising_edge(WCLK) then
+			-- One-cycle indication of WREN asserted while the FIFO was full.
+			OVF <= WREN and FULL;
+		end if;
+	end process;
 	
 end structure;
